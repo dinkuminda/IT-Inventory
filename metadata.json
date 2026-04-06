@@ -1,0 +1,5 @@
+{
+  "name": "ICS IT Admin Directorate Inventory Management System",
+  "description": "A comprehensive IT inventory management system for the ICS IT Admin Directorate, tracking hardware, software licenses, and asset assignments.",
+  "requestFramePermissions": []
+}
