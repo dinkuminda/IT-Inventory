@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -20,7 +21,9 @@ import {
   QrCode,
   CheckCircle,
   XCircle,
-  Clock
+  Clock,
+  Loader2,
+  AlertCircle
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import Papa from 'papaparse';
@@ -40,8 +43,13 @@ export default function AssetList() {
 
   const fetchAssets = async () => {
     try {
-      const res = await fetch('/api/assets');
-      setAssets(await res.json());
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .order('updatedAt', { ascending: false });
+      
+      if (error) throw error;
+      setAssets(data || []);
     } catch (error) {
       console.error('Error fetching assets:', error);
     }
@@ -66,7 +74,12 @@ export default function AssetList() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this asset?')) return;
     try {
-      await fetch(`/api/assets/${id}`, { method: 'DELETE' });
+      const { error } = await supabase
+        .from('assets')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
       fetchAssets();
     } catch (error) {
       console.error('Error deleting asset:', error);
@@ -109,31 +122,40 @@ export default function AssetList() {
       complete: async (results) => {
         const data = results.data as any[];
         let count = 0;
+        const assetsToInsert = [];
+        
         for (const item of data) {
           if (item.name && item.type && item.status) {
-            try {
-              await fetch('/api/assets', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                  name: item.name,
-                  type: item.type,
-                  serialNumber: item.serialNumber || '',
-                  status: item.status,
-                  assignedTo: item.assignedTo || '',
-                  roles: item.roles || '',
-                  location: item.location || '',
-                  date: item.date || '',
-                  remark: item.remark || '',
-                  notes: item.notes || ''
-                })
-              });
-              count++;
-            } catch (error) {
-              console.error('Error importing asset:', error);
-            }
+            assetsToInsert.push({
+              name: item.name,
+              type: item.type,
+              serialNumber: item.serialNumber || '',
+              status: item.status,
+              assignedTo: item.assignedTo || '',
+              roles: item.roles || '',
+              location: item.location || '',
+              date: item.date || '',
+              remark: item.remark || '',
+              notes: item.notes || '',
+              updatedAt: new Date().toISOString()
+            });
           }
         }
+
+        if (assetsToInsert.length > 0) {
+          try {
+            const { error } = await supabase
+              .from('assets')
+              .insert(assetsToInsert);
+            
+            if (error) throw error;
+            count = assetsToInsert.length;
+          } catch (error) {
+            console.error('Error importing assets:', error);
+            alert('Error importing assets. Check console for details.');
+          }
+        }
+
         alert(`Successfully imported ${count} assets.`);
         fetchAssets();
         e.target.value = '';
@@ -316,11 +338,10 @@ export default function AssetList() {
                           <>
                             <button 
                               onClick={async () => {
-                                await fetch(`/api/assets/${asset.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ approvalStatus: 'Approved' })
-                                });
+                                await supabase
+                                  .from('assets')
+                                  .update({ approvalStatus: 'Approved', updatedAt: new Date().toISOString() })
+                                  .eq('id', asset.id);
                                 fetchAssets();
                               }}
                               className="p-2 hover:bg-green-50 rounded-lg text-green-600 transition-colors"
@@ -330,11 +351,10 @@ export default function AssetList() {
                             </button>
                             <button 
                               onClick={async () => {
-                                await fetch(`/api/assets/${asset.id}`, {
-                                  method: 'PUT',
-                                  headers: { 'Content-Type': 'application/json' },
-                                  body: JSON.stringify({ approvalStatus: 'Rejected' })
-                                });
+                                await supabase
+                                  .from('assets')
+                                  .update({ approvalStatus: 'Rejected', updatedAt: new Date().toISOString() })
+                                  .eq('id', asset.id);
                                 fetchAssets();
                               }}
                               className="p-2 hover:bg-red-50 rounded-lg text-red-600 transition-colors"
@@ -394,6 +414,10 @@ export default function AssetList() {
         <AssetModal 
           asset={editingAsset} 
           onClose={() => setIsModalOpen(false)} 
+          onSuccess={() => {
+            setIsModalOpen(false);
+            fetchAssets();
+          }}
         />
       )}
 
@@ -450,7 +474,9 @@ function QRModal({ asset, onClose }: { asset: any, onClose: () => void }) {
   );
 }
 
-function AssetModal({ asset, onClose }: { asset?: any, onClose: () => void }) {
+function AssetModal({ asset, onClose, onSuccess }: { asset?: any, onClose: () => void, onSuccess: () => void }) {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: asset?.name || '',
     type: asset?.type || 'Laptop',
@@ -467,17 +493,32 @@ function AssetModal({ asset, onClose }: { asset?: any, onClose: () => void }) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
+    setError(null);
     try {
-      const url = asset ? `/api/assets/${asset.id}` : '/api/assets';
-      const method = asset ? 'PUT' : 'POST';
-      await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
-      });
-      onClose();
-    } catch (error) {
-      console.error('Error saving asset:', error);
+      const payload = {
+        ...formData,
+        updatedAt: new Date().toISOString()
+      };
+
+      if (asset) {
+        const { error: submitError } = await supabase
+          .from('assets')
+          .update(payload)
+          .eq('id', asset.id);
+        if (submitError) throw submitError;
+      } else {
+        const { error: submitError } = await supabase
+          .from('assets')
+          .insert([payload]);
+        if (submitError) throw submitError;
+      }
+      onSuccess();
+    } catch (err: any) {
+      console.error('Error saving asset:', err);
+      setError(err.message || 'Failed to save asset. Please check your permissions.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -491,10 +532,16 @@ function AssetModal({ asset, onClose }: { asset?: any, onClose: () => void }) {
         <div className="p-6 border-b border-neutral-100 flex items-center justify-between">
           <h3 className="text-xl font-bold tracking-tight">{asset ? 'Edit Asset' : 'Add New Asset'}</h3>
           <button onClick={onClose} className="p-2 hover:bg-neutral-100 rounded-full transition-colors">
-            <XIcon size={20} />
+            <LucideX size={20} />
           </button>
         </div>
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {error && (
+            <div className="p-3 bg-red-50 border border-red-100 text-red-600 text-xs font-bold rounded-xl flex items-center gap-2">
+              <AlertCircle size={14} />
+              {error}
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-4">
             <div className="col-span-2 space-y-1.5">
               <label className="text-xs font-bold uppercase tracking-widest text-neutral-500">Asset Name</label>
@@ -624,8 +671,10 @@ function AssetModal({ asset, onClose }: { asset?: any, onClose: () => void }) {
             </button>
             <button 
               type="submit"
-              className="flex-1 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-colors shadow-lg shadow-neutral-200"
+              disabled={isSubmitting}
+              className="flex-1 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-colors shadow-lg shadow-neutral-200 disabled:opacity-50 flex items-center justify-center gap-2"
             >
+              {isSubmitting && <Loader2 size={16} className="animate-spin" />}
               {asset ? 'Save Changes' : 'Add Asset'}
             </button>
           </div>

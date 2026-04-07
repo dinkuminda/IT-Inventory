@@ -6,9 +6,10 @@ import AssetList from './components/AssetList';
 import LicenseList from './components/LicenseList';
 import UserList from './components/UserList';
 import Login from './components/Login';
+import ChangePassword from './components/ChangePassword';
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, profile, loading } = useAuth();
   const [activeTab, setActiveTab] = useState('dashboard');
 
   if (loading) {
@@ -21,6 +22,10 @@ function AppContent() {
 
   if (!user) {
     return <Login />;
+  }
+
+  if (profile?.needsPasswordChange) {
+    return <ChangePassword />;
   }
 
   return (

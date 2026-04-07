@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { supabase } from '../supabaseClient';
 import { 
   BarChart, 
   Bar, 
@@ -31,19 +32,15 @@ export default function Dashboard() {
     const fetchData = async () => {
       try {
         const [assetsRes, licensesRes] = await Promise.all([
-          fetch('/api/assets'),
-          fetch('/api/licenses')
+          supabase.from('assets').select('*'),
+          supabase.from('licenses').select('*')
         ]);
         
-        if (!assetsRes.ok || !licensesRes.ok) {
-          throw new Error(`Server returned error: Assets: ${assetsRes.status}, Licenses: ${licensesRes.status}`);
-        }
+        if (assetsRes.error) throw assetsRes.error;
+        if (licensesRes.error) throw licensesRes.error;
 
-        const assetsData = await assetsRes.json();
-        const licensesData = await licensesRes.json();
-        
-        setAssets(assetsData);
-        setLicenses(licensesData);
+        setAssets(assetsRes.data || []);
+        setLicenses(licensesRes.data || []);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
       }

@@ -1,74 +1,107 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
+import { supabase } from '../supabaseClient';
+import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: any | null;
+  user: User | null;
   profile: any | null;
   loading: boolean;
   isAdmin: boolean;
   login: (email: string, pass: string) => Promise<void>;
   register: (email: string, pass: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const storedUser = localStorage.getItem('assetflow_user');
-    if (storedUser) {
-      const parsed = JSON.parse(storedUser);
-      setUser(parsed);
-      setProfile(parsed);
-    }
-    setLoading(false);
+    // Check active sessions and sets the user
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      if (session?.user) fetchProfile(session.user.id);
+      setLoading(false);
+    });
+
+    // Listen for changes on auth state (logged in, signed out, etc.)
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if (session?.user) {
+        fetchProfile(session.user.id);
+      } else {
+        setProfile(null);
+      }
+      setLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const login = async (email: string, pass: string) => {
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass })
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setUser(data.user);
-      setProfile(data.user);
-      localStorage.setItem('assetflow_user', JSON.stringify(data.user));
+  const fetchProfile = async (userId: string) => {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    
+    if (!error && data) {
+      setProfile(data);
     } else {
-      throw new Error(data.error || 'Login failed');
+      setProfile({ role: 'employee' });
     }
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+
+    // After successful password update, clear the flag in profiles
+    if (user) {
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ needsPasswordChange: false })
+        .eq('id', user.id);
+      
+      if (profileError) throw profileError;
+      await fetchProfile(user.id);
+    }
+  };
+
+  const login = async (email: string, pass: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ 
+      email: email.trim(), 
+      password: pass.trim() 
+    });
+    if (error) throw error;
   };
 
   const register = async (email: string, pass: string, name: string) => {
-    const res = await fetch('/api/auth/register', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: pass, name })
+    const trimmedEmail = email.trim();
+    const { error } = await supabase.auth.signUp({ 
+      email: trimmedEmail, 
+      password: pass.trim(),
+      options: {
+        data: { full_name: name }
+      }
     });
-    const data = await res.json();
-    if (res.ok) {
-      setUser(data.user);
-      setProfile(data.user);
-      localStorage.setItem('assetflow_user', JSON.stringify(data.user));
-    } else {
-      throw new Error(data.error || 'Registration failed');
-    }
+    
+    if (error) throw error;
   };
 
   const logout = async () => {
-    setUser(null);
-    setProfile(null);
-    localStorage.removeItem('assetflow_user');
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   const isAdmin = profile?.role === 'admin';
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, login, register, logout }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, login, register, logout, updatePassword }}>
       {children}
     </AuthContext.Provider>
   );

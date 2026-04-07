@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { supabase } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -23,8 +24,13 @@ export default function LicenseList() {
 
   const fetchLicenses = async () => {
     try {
-      const res = await fetch('/api/licenses');
-      setLicenses(await res.json());
+      const { data, error } = await supabase
+        .from('licenses')
+        .select('*')
+        .order('updatedAt', { ascending: false });
+      
+      if (error) throw error;
+      setLicenses(data || []);
     } catch (error) {
       console.error('Error fetching licenses:', error);
     }
@@ -43,7 +49,12 @@ export default function LicenseList() {
   const handleDelete = async (id: string) => {
     if (!window.confirm('Are you sure you want to delete this license?')) return;
     try {
-      await fetch(`/api/licenses/${id}`, { method: 'DELETE' });
+      const { error } = await supabase
+        .from('licenses')
+        .delete()
+        .eq('id', id);
+      
+      if (error) throw error;
       fetchLicenses();
     } catch (error) {
       console.error('Error deleting license:', error);
@@ -167,17 +178,25 @@ function LicenseModal({ license, onClose }: { license?: any, onClose: () => void
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      const url = license ? `/api/licenses/${license.id}` : '/api/licenses';
-      const method = license ? 'PUT' : 'POST';
-      await fetch(url, {
-        method,
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...formData,
-          totalSeats: Number(formData.totalSeats),
-          usedSeats: Number(formData.usedSeats)
-        })
-      });
+      const payload = {
+        ...formData,
+        totalSeats: Number(formData.totalSeats),
+        usedSeats: Number(formData.usedSeats),
+        updatedAt: new Date().toISOString()
+      };
+
+      if (license) {
+        const { error } = await supabase
+          .from('licenses')
+          .update(payload)
+          .eq('id', license.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('licenses')
+          .insert([payload]);
+        if (error) throw error;
+      }
       onClose();
     } catch (error) {
       console.error('Error saving license:', error);
