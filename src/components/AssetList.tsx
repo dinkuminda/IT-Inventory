@@ -245,13 +245,13 @@ export default function AssetList() {
             <thead>
               <tr className="bg-neutral-50/50 border-b border-neutral-100">
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Asset</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Type</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Role</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden md:table-cell">Type</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden lg:table-cell">Role</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Status</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Location</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Date</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Approval</th>
-                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500">Assignment</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden xl:table-cell">Location</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden xl:table-cell">Date</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden sm:table-cell">Approval</th>
+                <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 hidden md:table-cell">Assignment</th>
                 <th className="px-6 py-4 text-xs font-bold uppercase tracking-widest text-neutral-500 text-right">Actions</th>
               </tr>
             </thead>
@@ -262,7 +262,7 @@ export default function AssetList() {
                   <tr key={asset.id} className="hover:bg-neutral-50/50 transition-colors group">
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-3">
-                        <div className="p-2 bg-neutral-100 rounded-lg text-neutral-600 group-hover:bg-white transition-colors">
+                        <div className="p-2 bg-neutral-100 rounded-lg text-neutral-600 group-hover:bg-white transition-colors hidden sm:flex">
                           <Icon size={18} />
                         </div>
                         <div>
@@ -271,10 +271,10 @@ export default function AssetList() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden md:table-cell">
                       <span className="text-sm font-medium text-neutral-600">{asset.type}</span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden lg:table-cell">
                       <span className="text-sm font-medium text-neutral-600">{asset.roles || '-'}</span>
                     </td>
                     <td className="px-6 py-4">
@@ -289,13 +289,13 @@ export default function AssetList() {
                         {asset.status}
                       </span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden xl:table-cell">
                       <span className="text-sm font-medium text-neutral-600">{asset.location || '-'}</span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden xl:table-cell">
                       <span className="text-sm font-medium text-neutral-600">{asset.date || '-'}</span>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden sm:table-cell">
                       <div className={cn(
                         "flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider w-fit",
                         asset.approvalStatus === 'Approved' ? "bg-green-50 text-green-700 border border-green-100" :
@@ -308,7 +308,7 @@ export default function AssetList() {
                         {asset.approvalStatus || 'Pending'}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
+                    <td className="px-6 py-4 hidden md:table-cell">
                       <div className="flex flex-col gap-1">
                         <div className="flex items-center gap-2">
                           <div className={cn(
