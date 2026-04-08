@@ -74,7 +74,16 @@ export default function UserList() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: userId })
       });
-      if (!response.ok) throw new Error('Failed to delete user');
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to delete user');
+      } else {
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+      }
+      
       fetchUsers();
     } catch (error: any) {
       alert(error.message);
@@ -215,8 +224,16 @@ export default function UserList() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                   });
-                  const result = await response.json();
-                  if (!response.ok) throw new Error(result.error || 'Failed to create user');
+                  
+                  const contentType = response.headers.get('content-type');
+                  if (contentType && contentType.includes('application/json')) {
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Failed to create user');
+                  } else {
+                    const text = await response.text();
+                    if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+                  }
+                  
                   setIsModalOpen(false);
                   setFormData({ email: '', fullName: '', department: 'IT Department', password: 'Password123!' });
                   fetchUsers();
@@ -284,8 +301,16 @@ export default function UserList() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: selectedUser.id, ...editFormData })
                   });
-                  const result = await response.json();
-                  if (!response.ok) throw new Error(result.error || 'Failed to update user');
+                  
+                  const contentType = response.headers.get('content-type');
+                  if (contentType && contentType.includes('application/json')) {
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Failed to update user');
+                  } else {
+                    const text = await response.text();
+                    if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+                  }
+                  
                   setIsEditModalOpen(false);
                   fetchUsers();
                 } catch (err: any) {
@@ -351,8 +376,16 @@ export default function UserList() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ id: selectedUser.id, ...resetPasswordData })
                   });
-                  const result = await response.json();
-                  if (!response.ok) throw new Error(result.error || 'Failed to reset password');
+                  
+                  const contentType = response.headers.get('content-type');
+                  if (contentType && contentType.includes('application/json')) {
+                    const result = await response.json();
+                    if (!response.ok) throw new Error(result.error || 'Failed to reset password');
+                  } else {
+                    const text = await response.text();
+                    if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+                  }
+                  
                   setIsResetModalOpen(false);
                   alert('Password reset successfully. User will be prompted to change it at next login.');
                 } catch (err: any) {

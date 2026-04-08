@@ -79,7 +79,16 @@ export default function AssetList() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
       });
-      if (!response.ok) throw new Error('Failed to delete asset');
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to delete asset');
+      } else {
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+      }
+      
       fetchAssets();
     } catch (error: any) {
       console.error('Error deleting asset:', error);
@@ -134,11 +143,12 @@ export default function AssetList() {
               serialNumber: item.serialNumber || '',
               status: item.status,
               assignedTo: isAdmin ? (item.assignedTo || '') : (profile?.email || ''),
-              roles: item.roles || '',
+              roles: item.roles || 'IT Support',
               location: item.location || '',
-              date: item.date || '',
+              date: item.date || new Date().toISOString().split('T')[0],
               remark: item.remark || '',
               notes: item.notes || '',
+              approvalStatus: isAdmin ? (item.approvalStatus || 'Approved') : 'Pending',
               updatedAt: new Date().toISOString()
             });
           }
@@ -151,7 +161,15 @@ export default function AssetList() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ payload: assetsToInsert })
             });
-            if (!response.ok) throw new Error('Failed to import assets');
+            
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error || 'Failed to import assets');
+            } else {
+              const text = await response.text();
+              if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+            }
             
             count = assetsToInsert.length;
             fetchAssets();
@@ -161,8 +179,11 @@ export default function AssetList() {
           }
         }
 
-        alert(`Successfully imported ${count} assets.`);
-        fetchAssets();
+        if (count > 0) {
+          alert(`Successfully imported ${count} assets.`);
+        } else if (assetsToInsert.length === 0) {
+          alert('No valid assets found in CSV. Please ensure "name", "type", and "status" columns are present.');
+        }
         e.target.value = '';
       },
       error: (error) => {
@@ -354,7 +375,16 @@ export default function AssetList() {
                                       updates: { approvalStatus: 'Approved', updatedAt: new Date().toISOString() } 
                                     })
                                   });
-                                  if (!response.ok) throw new Error('Failed to approve asset');
+                                  
+                                  const contentType = response.headers.get('content-type');
+                                  if (contentType && contentType.includes('application/json')) {
+                                    const result = await response.json();
+                                    if (!response.ok) throw new Error(result.error || 'Failed to approve asset');
+                                  } else {
+                                    const text = await response.text();
+                                    if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+                                  }
+                                  
                                   fetchAssets();
                                 } catch (error: any) {
                                   alert(error.message);
@@ -376,7 +406,16 @@ export default function AssetList() {
                                       updates: { approvalStatus: 'Rejected', updatedAt: new Date().toISOString() } 
                                     })
                                   });
-                                  if (!response.ok) throw new Error('Failed to reject asset');
+                                  
+                                  const contentType = response.headers.get('content-type');
+                                  if (contentType && contentType.includes('application/json')) {
+                                    const result = await response.json();
+                                    if (!response.ok) throw new Error(result.error || 'Failed to reject asset');
+                                  } else {
+                                    const text = await response.text();
+                                    if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+                                  }
+                                  
                                   fetchAssets();
                                 } catch (error: any) {
                                   alert(error.message);
@@ -538,8 +577,15 @@ function AssetModal({ asset, onClose, onSuccess }: { asset?: any, onClose: () =>
         })
       });
 
-      const result = await response.json();
-      if (!response.ok) throw new Error(result.error || 'Failed to save asset');
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to save asset');
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+      }
 
       onSuccess();
     } catch (err: any) {

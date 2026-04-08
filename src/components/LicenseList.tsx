@@ -57,7 +57,16 @@ export default function LicenseList() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id })
       });
-      if (!response.ok) throw new Error('Failed to delete license');
+      
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to delete license');
+      } else {
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+      }
+      
       fetchLicenses();
     } catch (error: any) {
       console.error('Error deleting license:', error);
@@ -114,7 +123,15 @@ export default function LicenseList() {
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ payload: licensesToInsert })
             });
-            if (!response.ok) throw new Error('Failed to import licenses');
+            
+            const contentType = response.headers.get('content-type');
+            if (contentType && contentType.includes('application/json')) {
+              const result = await response.json();
+              if (!response.ok) throw new Error(result.error || 'Failed to import licenses');
+            } else {
+              const text = await response.text();
+              if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+            }
             
             count = licensesToInsert.length;
             fetchLicenses();
@@ -289,10 +306,19 @@ function LicenseModal({ license, onClose }: { license?: any, onClose: () => void
         })
       });
 
-      if (!response.ok) throw new Error('Failed to save license');
+      const contentType = response.headers.get('content-type');
+      if (contentType && contentType.includes('application/json')) {
+        const result = await response.json();
+        if (!response.ok) throw new Error(result.error || 'Failed to save license');
+      } else {
+        const text = await response.text();
+        if (!response.ok) throw new Error(`Server error (${response.status}): ${text.substring(0, 100)}...`);
+      }
+
       onClose();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error saving license:', error);
+      alert(error.message);
     }
   };
 

@@ -26,7 +26,9 @@ async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  app.use(express.json());
+  // Increase JSON limit for bulk imports
+  app.use(express.json({ limit: '50mb' }));
+  app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   // Request logging - MUST be before routes
   app.use((req, res, next) => {
@@ -130,7 +132,11 @@ async function startServer() {
 
   // Asset Management Endpoints (Bypass RLS)
   app.post("/api/assets/save", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    console.log('POST /api/assets/save hit');
+    if (!supabaseAdmin) {
+      console.error('Supabase Admin not initialized');
+      return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    }
     const { assetId, payload } = req.body;
     try {
       if (assetId) {
