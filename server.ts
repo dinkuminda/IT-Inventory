@@ -44,16 +44,43 @@ async function startServer() {
   app.get("/api/health", async (req, res) => {
     let supabaseStatus = "not_configured";
     let assetsTableStatus = "unknown";
+    let columns: string[] = [];
     
     if (supabaseAdmin) {
       try {
-        const { error } = await supabaseAdmin.from('assets').select('id').limit(1);
+        // Check connection and get columns
+        const { data, error } = await supabaseAdmin.rpc('get_table_columns', { table_name: 'assets' });
+        
+        // Fallback if RPC doesn't exist
         if (error) {
-          supabaseStatus = "error";
-          assetsTableStatus = error.message;
+          const { data: colData, error: colError } = await supabaseAdmin
+            .from('assets')
+            .select('*')
+            .limit(1);
+            
+          if (colError) {
+            supabaseStatus = "error";
+            assetsTableStatus = colError.message;
+          } else {
+            supabaseStatus = "ok";
+            assetsTableStatus = "ok";
+            if (colData && colData.length > 0) {
+              columns = Object.keys(colData[0]);
+            } else {
+              // Try to get columns from a dummy query if table is empty
+              const { data: emptyData, error: emptyError } = await supabaseAdmin
+                .from('assets')
+                .select('*')
+                .limit(0);
+              if (!emptyError && emptyData) {
+                // This doesn't usually work for columns in Supabase JS client if empty
+              }
+            }
+          }
         } else {
           supabaseStatus = "ok";
           assetsTableStatus = "ok";
+          columns = data;
         }
       } catch (e: any) {
         supabaseStatus = "exception";
@@ -66,6 +93,7 @@ async function startServer() {
       supabaseConfigured: !!supabaseAdmin,
       supabaseStatus,
       assetsTableStatus,
+      columns,
       env: process.env.NODE_ENV,
       time: new Date().toISOString()
     });
@@ -153,6 +181,7 @@ async function startServer() {
   app.post("/api/assets/save", async (req, res) => {
     if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
     const { assetId, payload } = req.body;
+    console.log(`Saving asset: ID=${assetId}, Payload Keys=${Object.keys(payload || {})}`);
     try {
       if (Array.isArray(payload)) {
         // Bulk import
