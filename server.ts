@@ -170,7 +170,12 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error saving asset:', error);
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ 
+        error: error.message || "Unknown database error",
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
     }
   });
 
@@ -221,7 +226,12 @@ async function startServer() {
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error saving license:', error);
-      res.status(400).json({ error: error.message });
+      res.status(400).json({ 
+        error: error.message || "Unknown database error",
+        details: error.details,
+        hint: error.hint,
+        code: error.code
+      });
     }
   });
 

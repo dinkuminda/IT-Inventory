@@ -124,7 +124,11 @@ export default function LicenseList() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to save license' }));
-        throw new Error(errorData.error || 'Failed to save license');
+        let errorMessage = errorData.error || 'Failed to save license';
+        if (errorData.details) errorMessage += ` (Details: ${errorData.details})`;
+        if (errorData.hint) errorMessage += ` (Hint: ${errorData.hint})`;
+        if (errorData.code) errorMessage += ` [Code: ${errorData.code}]`;
+        throw new Error(errorMessage);
       }
       
       setIsModalOpen(false);

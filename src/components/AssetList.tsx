@@ -167,7 +167,11 @@ export default function AssetList() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to save asset' }));
-        throw new Error(errorData.error || 'Failed to save asset');
+        let errorMessage = errorData.error || 'Failed to save asset';
+        if (errorData.details) errorMessage += ` (Details: ${errorData.details})`;
+        if (errorData.hint) errorMessage += ` (Hint: ${errorData.hint})`;
+        if (errorData.code) errorMessage += ` [Code: ${errorData.code}]`;
+        throw new Error(errorMessage);
       }
       
       setIsModalOpen(false);
