@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { db } from '../firebase';
+import { collection, onSnapshot, query } from 'firebase/firestore';
 import { 
   BarChart, 
   Bar, 
@@ -32,40 +33,30 @@ export default function Dashboard() {
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const fetchData = async () => {
-    try {
-      const [assetsRes, licensesRes] = await Promise.all([
-        supabase.from('assets').select('*'),
-        supabase.from('licenses').select('*')
-      ]);
-      
-      if (assetsRes.error) throw assetsRes.error;
-      if (licensesRes.error) throw licensesRes.error;
-
-      setAssets(assetsRes.data || []);
-      setLicenses(licensesRes.data || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchData();
-    
-    // Subscribe to changes
-    const assetsChannel = supabase.channel('dashboard-assets')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, fetchData)
-      .subscribe();
-      
-    const licensesChannel = supabase.channel('dashboard-licenses')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'licenses' }, fetchData)
-      .subscribe();
+    // Assets Subscription
+    const assetsQuery = query(collection(db, 'assets'));
+    const unsubscribeAssets = onSnapshot(assetsQuery, (snapshot) => {
+      const assetsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAssets(assetsData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching assets:', error);
+      setLoading(false);
+    });
+
+    // Licenses Subscription
+    const licensesQuery = query(collection(db, 'licenses'));
+    const unsubscribeLicenses = onSnapshot(licensesQuery, (snapshot) => {
+      const licensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLicenses(licensesData);
+    }, (error) => {
+      console.error('Error fetching licenses:', error);
+    });
 
     return () => {
-      supabase.removeChannel(assetsChannel);
-      supabase.removeChannel(licensesChannel);
+      unsubscribeAssets();
+      unsubscribeLicenses();
     };
   }, []);
 

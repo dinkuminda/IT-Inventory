@@ -1,0 +1,105 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // 0. Default Deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- Helpers ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isEmailVerified() {
+      // In this environment we might not force email verification yet, 
+      // but it's a pillar. Let's stick to isSignedIn for now if not strictly required,
+      // but usually we want it.
+      return request.auth.token.email_verified == true;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function getUserData() {
+      return get(/databases/$(database)/documents/profiles/$(request.auth.uid)).data;
+    }
+
+    function isAdmin() {
+      // Identity check against profile document
+      return isSignedIn() && getUserData().role == 'admin';
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // --- Entity Validations ---
+
+    function isValidProfile(data) {
+      return data.id is string &&
+             data.email is string && data.email.size() <= 256 &&
+             (data.role == 'admin' || data.role == 'employee');
+    }
+
+    function isValidAsset(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200 &&
+             (data.get('approvalStatus', 'Pending') in ['Pending', 'Approved', 'Rejected']);
+    }
+
+    function isValidLicense(data) {
+      return data.name is string && data.name.size() > 0 && data.name.size() <= 200;
+    }
+
+    // --- Collections ---
+
+    match /profiles/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      
+      allow create: if isSignedIn() && (isOwner(userId) || isAdmin()) && isValidProfile(incoming());
+      
+      allow update: if isSignedIn() && (isOwner(userId) || isAdmin()) && 
+                    isValidProfile(incoming()) && (
+                      // Users can only change certain fields if they aren't admin?
+                      // Actually admin can change roles, users can't.
+                      (isAdmin() && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'role', 'needsPasswordChange', 'updatedAt'])) ||
+                      (isOwner(userId) && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'department', 'needsPasswordChange', 'updatedAt']) && incoming().role == existing().role)
+                    );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /assets/{assetId} {
+      // Restricted list/get based on role
+      allow read: if isSignedIn(); 
+      
+      // Writes are usually through server but admin can do it directly too
+      allow create: if isAdmin() && isValidAsset(incoming());
+      
+      allow update: if isAdmin() && isValidAsset(incoming()) && (
+        // Action: General Update
+        incoming().diff(existing()).affectedKeys().hasAny(['name', 'type', 'serialNumber', 'status', 'assignedTo', 'roles', 'location', 'date', 'remark', 'notes', 'approvalStatus', 'updatedAt'])
+      );
+      
+      allow delete: if isAdmin();
+    }
+
+    match /licenses/{licenseId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && isValidLicense(incoming());
+      allow update: if isAdmin() && isValidLicense(incoming());
+      allow delete: if isAdmin();
+    }
+  }
+}

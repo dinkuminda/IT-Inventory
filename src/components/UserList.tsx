@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
   UserPlus, 
   Search, 
@@ -48,37 +49,17 @@ export default function UserList() {
     newPassword: ''
   });
 
-  const fetchUsers = () => {
-    const channel = supabase.channel('profiles-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
-        fetchUsersData();
-      })
-      .subscribe();
-
-    fetchUsersData();
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
-
-  const fetchUsersData = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('displayName', { ascending: true });
-      
-      if (error) throw error;
-      setUsers(data || []);
-    } catch (error) {
-      console.error('Error fetching users:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    const unsubscribe = fetchUsers();
+    const q = query(collection(db, 'profiles'), orderBy('displayName', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setUsers(usersData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching users:', error);
+      setLoading(false);
+    });
+
     return () => unsubscribe();
   }, []);
 
@@ -91,7 +72,6 @@ export default function UserList() {
         body: JSON.stringify({ id: userId })
       });
       if (!response.ok) throw new Error('Failed to delete user');
-      fetchUsersData();
     } catch (error: any) {
       alert(error.message);
     }
@@ -265,7 +245,6 @@ export default function UserList() {
                   
                   setIsModalOpen(false);
                   setFormData({ email: '', password: '', fullName: '', department: 'IT Department' });
-                  fetchUsersData();
                 } catch (err: any) {
                   setError(err.message);
                 } finally {
@@ -352,7 +331,6 @@ export default function UserList() {
                   }
                   
                   setIsEditModalOpen(false);
-                  fetchUsersData();
                 } catch (err: any) {
                   setError(err.message);
                 } finally {

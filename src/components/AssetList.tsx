@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
   Plus, 
   Search, 
@@ -51,32 +52,18 @@ export default function AssetList() {
     notes: ''
   });
 
-  const fetchAssets = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('assets')
-        .select('*')
-        .order('updatedAt', { ascending: false });
-      
-      if (error) throw error;
-      setAssets(data || []);
-    } catch (error) {
-      console.error('Error fetching assets:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchAssets();
-    
-    const channel = supabase.channel('assets-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, fetchAssets)
-      .subscribe();
+    const q = query(collection(db, 'assets'), orderBy('updatedAt', 'desc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const assetsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setAssets(assetsData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching assets:', error);
+      setLoading(false);
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => unsubscribe();
   }, []);
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -103,8 +90,7 @@ export default function AssetList() {
               date: item.date || new Date().toISOString().split('T')[0],
               remark: item.remark || '',
               notes: item.notes || '',
-              approvalStatus: isAdmin ? (item.approvalStatus || 'Approved') : 'Pending',
-              updatedAt: new Date().toISOString()
+              approvalStatus: isAdmin ? (item.approvalStatus || 'Approved') : 'Pending'
             });
           }
         }
@@ -120,7 +106,6 @@ export default function AssetList() {
             if (!response.ok) throw new Error('Failed to import assets');
             
             count = assetsToInsert.length;
-            fetchAssets();
             alert(`Successfully imported ${count} assets.`);
           } catch (error: any) {
             console.error('Error importing assets:', error);
@@ -181,7 +166,6 @@ export default function AssetList() {
         assignedTo: '', roles: 'IT Support', location: '',
         date: new Date().toISOString().split('T')[0], remark: '', notes: ''
       });
-      fetchAssets();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -198,7 +182,6 @@ export default function AssetList() {
         body: JSON.stringify({ id })
       });
       if (!response.ok) throw new Error('Failed to delete asset');
-      fetchAssets();
     } catch (error: any) {
       alert(error.message);
     }
@@ -369,7 +352,6 @@ export default function AssetList() {
                                   })
                                 });
                                 if (!response.ok) throw new Error('Failed to approve asset');
-                                fetchAssets();
                               } catch (error: any) {
                                 alert(error.message);
                               }
@@ -391,7 +373,6 @@ export default function AssetList() {
                                   })
                                 });
                                 if (!response.ok) throw new Error('Failed to reject asset');
-                                fetchAssets();
                               } catch (error: any) {
                                 alert(error.message);
                               }

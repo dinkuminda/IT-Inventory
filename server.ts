@@ -2,37 +2,44 @@ import express from "express";
 import { createServer as createViteServer } from "vite";
 import path from "path";
 import { fileURLToPath } from "url";
-import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import * as admin from 'firebase-admin';
+import fs from 'fs';
 
 dotenv.config();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const SUPABASE_URL = process.env.VITE_SUPABASE_URL || process.env.SUPABASE_URL || "https://wshzrohkcjgemxnwjivp.supabase.co";
-const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+// Initialize Firebase Admin
+let firebaseAdmin: admin.app.App | null = null;
+const configPath = path.join(process.cwd(), 'firebase-applet-config.json');
 
-const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY 
-  ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false
-      }
-    })
-  : null;
+if (fs.existsSync(configPath)) {
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf8'));
+    // For local dev in AI Studio, we often don't have a service account key file,
+    // but the environment might be provisioned for us if we use the right project ID.
+    // However, the standard way in our environment is to use the provisioned project.
+    if (!admin.apps.length) {
+      firebaseAdmin = admin.initializeApp({
+        projectId: config.projectId,
+      });
+    } else {
+      firebaseAdmin = admin.app();
+    }
+    console.log('Firebase Admin initialized for project:', config.projectId);
+  } catch (error) {
+    console.error('Error initializing Firebase Admin:', error);
+  }
+}
 
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  console.log('Initializing ICS IT Admin Server (Supabase)...');
-  if (!SUPABASE_SERVICE_ROLE_KEY) {
-    console.warn('WARNING: SUPABASE_SERVICE_ROLE_KEY is not set. Administrative actions (user management, asset saving) will fail.');
-  } else {
-    console.log('Supabase Service Role Key is configured.');
-  }
-
+  console.log('Initializing ICS IT Admin Server (Firebase)...');
+  
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
@@ -42,58 +49,27 @@ async function startServer() {
   });
 
   app.get("/api/health", async (req, res) => {
-    let supabaseStatus = "not_configured";
-    let assetsTableStatus = "unknown";
-    let columns: string[] = [];
+    let firebaseStatus = "not_configured";
+    let collections: string[] = [];
     
-    if (supabaseAdmin) {
+    if (firebaseAdmin) {
       try {
-        // Check connection and get columns
-        const { data, error } = await supabaseAdmin.rpc('get_table_columns', { table_name: 'assets' });
-        
-        // Fallback if RPC doesn't exist
-        if (error) {
-          const { data: colData, error: colError } = await supabaseAdmin
-            .from('assets')
-            .select('*')
-            .limit(1);
-            
-          if (colError) {
-            supabaseStatus = "error";
-            assetsTableStatus = colError.message;
-          } else {
-            supabaseStatus = "ok";
-            assetsTableStatus = "ok";
-            if (colData && colData.length > 0) {
-              columns = Object.keys(colData[0]);
-            } else {
-              // Try to get columns from a dummy query if table is empty
-              const { data: emptyData, error: emptyError } = await supabaseAdmin
-                .from('assets')
-                .select('*')
-                .limit(0);
-              if (!emptyError && emptyData) {
-                // This doesn't usually work for columns in Supabase JS client if empty
-              }
-            }
-          }
-        } else {
-          supabaseStatus = "ok";
-          assetsTableStatus = "ok";
-          columns = data;
-        }
+        const db = firebaseAdmin.firestore();
+        // Check connection by listing collections (minimal read)
+        firebaseStatus = "ok";
+        const collectionsList = await db.listCollections();
+        collections = collectionsList.map(c => c.id);
       } catch (e: any) {
-        supabaseStatus = "exception";
-        assetsTableStatus = e.message;
+        firebaseStatus = "error";
+        console.error('Health check error:', e);
       }
     }
 
     res.json({ 
       status: "ok", 
-      supabaseConfigured: !!supabaseAdmin,
-      supabaseStatus,
-      assetsTableStatus,
-      columns,
+      firebaseConfigured: !!firebaseAdmin,
+      firebaseStatus,
+      collections,
       env: process.env.NODE_ENV,
       time: new Date().toISOString()
     });
@@ -101,33 +77,29 @@ async function startServer() {
 
   // Admin User Creation Endpoint
   app.post("/api/admin/create-user", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { email, password, fullName, department } = req.body;
 
     try {
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      const userRecord = await firebaseAdmin.auth().createUser({
         email,
         password,
-        email_confirm: true,
-        user_metadata: { full_name: fullName }
+        displayName: fullName,
       });
 
-      if (authError) throw authError;
+      const profileData = {
+        id: userRecord.uid,
+        email,
+        displayName: fullName,
+        department: department || 'IT Department',
+        role: 'employee',
+        needsPasswordChange: true,
+        updatedAt: new Date().toISOString()
+      };
 
-      const { error: profileError } = await supabaseAdmin
-        .from('profiles')
-        .upsert([{
-          id: authData.user.id,
-          email,
-          displayName: fullName,
-          department: department || 'IT Department',
-          role: 'employee',
-          needsPasswordChange: true
-        }], { onConflict: 'id' });
+      await firebaseAdmin.firestore().collection('profiles').doc(userRecord.uid).set(profileData);
 
-      if (profileError) throw profileError;
-
-      res.json({ success: true, user: authData.user });
+      res.json({ success: true, user: userRecord });
     } catch (error: any) {
       console.error('Error creating user:', error);
       res.status(400).json({ error: error.message });
@@ -135,14 +107,15 @@ async function startServer() {
   });
 
   app.post("/api/admin/update-user", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id, fullName, department, role } = req.body;
     try {
-      const { error } = await supabaseAdmin
-        .from('profiles')
-        .update({ displayName: fullName, department, role })
-        .eq('id', id);
-      if (error) throw error;
+      await firebaseAdmin.firestore().collection('profiles').doc(id).update({
+        displayName: fullName,
+        department,
+        role,
+        updatedAt: new Date().toISOString()
+      });
       res.json({ success: true });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -150,13 +123,11 @@ async function startServer() {
   });
 
   app.post("/api/admin/delete-user", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id } = req.body;
     try {
-      const { error: authError } = await supabaseAdmin.auth.admin.deleteUser(id);
-      if (authError) throw authError;
-      const { error: profileError } = await supabaseAdmin.from('profiles').delete().eq('id', id);
-      if (profileError) throw profileError;
+      await firebaseAdmin.auth().deleteUser(id);
+      await firebaseAdmin.firestore().collection('profiles').doc(id).delete();
       res.json({ success: true });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -164,13 +135,14 @@ async function startServer() {
   });
 
   app.post("/api/admin/reset-password", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id, newPassword } = req.body;
     try {
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, { password: newPassword });
-      if (authError) throw authError;
-      const { error: profileError } = await supabaseAdmin.from('profiles').update({ needsPasswordChange: true }).eq('id', id);
-      if (profileError) throw profileError;
+      await firebaseAdmin.auth().updateUser(id, { password: newPassword });
+      await firebaseAdmin.firestore().collection('profiles').doc(id).update({
+        needsPasswordChange: true,
+        updatedAt: new Date().toISOString()
+      });
       res.json({ success: true });
     } catch (error: any) {
       res.status(400).json({ error: error.message });
@@ -179,41 +151,45 @@ async function startServer() {
 
   // Asset Endpoints
   app.post("/api/assets/save", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { assetId, payload } = req.body;
     console.log(`Saving asset: ID=${assetId}, Payload Keys=${Object.keys(payload || {})}`);
     try {
+      const db = firebaseAdmin.firestore();
       if (Array.isArray(payload)) {
         // Bulk import
-        const { error } = await supabaseAdmin.from('assets').insert(payload);
-        if (error) throw error;
+        const batch = db.batch();
+        payload.forEach(item => {
+          const ref = db.collection('assets').doc();
+          batch.set(ref, { ...item, updatedAt: new Date().toISOString() });
+        });
+        await batch.commit();
       } else if (assetId) {
         // Update existing
-        const { error } = await supabaseAdmin.from('assets').update(payload).eq('id', assetId);
-        if (error) throw error;
+        await db.collection('assets').doc(assetId).update({ ...payload, updatedAt: new Date().toISOString() });
       } else {
         // Create new
-        const { error } = await supabaseAdmin.from('assets').insert([payload]);
-        if (error) throw error;
+        const ref = db.collection('assets').doc();
+        await ref.set({ ...payload, id: ref.id, updatedAt: new Date().toISOString() });
       }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error saving asset:', error);
       res.status(400).json({ 
         error: error.message || "Unknown database error",
-        details: error.details,
-        hint: error.hint,
         code: error.code
       });
     }
   });
 
   app.post("/api/assets/update", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id, updates, payload } = req.body;
     try {
-      const { error } = await supabaseAdmin.from('assets').update(updates || payload).eq('id', id);
-      if (error) throw error;
+      await firebaseAdmin.firestore().collection('assets').doc(id).update({
+        ...(updates || payload),
+        updatedAt: new Date().toISOString()
+      });
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error updating asset:', error);
@@ -222,11 +198,10 @@ async function startServer() {
   });
 
   app.post("/api/assets/delete", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id } = req.body;
     try {
-      const { error } = await supabaseAdmin.from('assets').delete().eq('id', id);
-      if (error) throw error;
+      await firebaseAdmin.firestore().collection('assets').doc(id).delete();
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting asset:', error);
@@ -236,40 +211,41 @@ async function startServer() {
 
   // License Endpoints
   app.post("/api/licenses/save", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { licenseId, payload } = req.body;
     try {
+      const db = firebaseAdmin.firestore();
       if (Array.isArray(payload)) {
         // Bulk import
-        const { error } = await supabaseAdmin.from('licenses').insert(payload);
-        if (error) throw error;
+        const batch = db.batch();
+        payload.forEach(item => {
+          const ref = db.collection('licenses').doc();
+          batch.set(ref, { ...item, updatedAt: new Date().toISOString() });
+        });
+        await batch.commit();
       } else if (licenseId) {
         // Update existing
-        const { error } = await supabaseAdmin.from('licenses').update(payload).eq('id', licenseId);
-        if (error) throw error;
+        await db.collection('licenses').doc(licenseId).update({ ...payload, updatedAt: new Date().toISOString() });
       } else {
         // Create new
-        const { error } = await supabaseAdmin.from('licenses').insert([payload]);
-        if (error) throw error;
+        const ref = db.collection('licenses').doc();
+        await ref.set({ ...payload, id: ref.id, updatedAt: new Date().toISOString() });
       }
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error saving license:', error);
       res.status(400).json({ 
         error: error.message || "Unknown database error",
-        details: error.details,
-        hint: error.hint,
         code: error.code
       });
     }
   });
 
   app.post("/api/licenses/delete", async (req, res) => {
-    if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
+    if (!firebaseAdmin) return res.status(500).json({ error: "Firebase Admin not configured" });
     const { id } = req.body;
     try {
-      const { error } = await supabaseAdmin.from('licenses').delete().eq('id', id);
-      if (error) throw error;
+      await firebaseAdmin.firestore().collection('licenses').doc(id).delete();
       res.json({ success: true });
     } catch (error: any) {
       console.error('Error deleting license:', error);

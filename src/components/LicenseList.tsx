@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { db } from '../firebase';
+import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
 import { 
   Plus, 
   Search, 
@@ -42,32 +43,18 @@ export default function LicenseList() {
     notes: ''
   });
 
-  const fetchLicenses = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('licenses')
-        .select('*')
-        .order('name', { ascending: true });
-      
-      if (error) throw error;
-      setLicenses(data || []);
-    } catch (error) {
-      console.error('Error fetching licenses:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    fetchLicenses();
-    
-    const channel = supabase.channel('licenses-changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'licenses' }, fetchLicenses)
-      .subscribe();
+    const q = query(collection(db, 'licenses'), orderBy('name', 'asc'));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const licensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setLicenses(licensesData);
+      setLoading(false);
+    }, (error) => {
+      console.error('Error fetching licenses:', error);
+      setLoading(false);
+    });
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => unsubscribe();
   }, []);
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -97,7 +84,6 @@ export default function LicenseList() {
               body: JSON.stringify({ payload: licensesToInsert })
             });
             if (!response.ok) throw new Error('Failed to import licenses');
-            fetchLicenses();
             alert(`Successfully imported ${licensesToInsert.length} licenses.`);
           } catch (error: any) {
             alert(error.message);
@@ -137,7 +123,6 @@ export default function LicenseList() {
         name: '', vendor: '', key: '', seats: 1, usedSeats: 0,
         expiryDate: '', department: 'IT Department', notes: ''
       });
-      fetchLicenses();
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -154,7 +139,6 @@ export default function LicenseList() {
         body: JSON.stringify({ id })
       });
       if (!response.ok) throw new Error('Failed to delete license');
-      fetchLicenses();
     } catch (error: any) {
       alert(error.message);
     }
