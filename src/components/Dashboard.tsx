@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { db } from '../firebase';
-import { collection, onSnapshot, query } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 import { 
   BarChart, 
   Bar, 
@@ -33,30 +32,43 @@ export default function Dashboard() {
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    // Assets Subscription
-    const assetsQuery = query(collection(db, 'assets'));
-    const unsubscribeAssets = onSnapshot(assetsQuery, (snapshot) => {
-      const assetsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAssets(assetsData);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching assets:', error);
-      setLoading(false);
-    });
+  const fetchData = async () => {
+    try {
+      const { data: assetsData, error: assetsError } = await supabase
+        .from('assets')
+        .select('*');
+      
+      const { data: licensesData, error: licensesError } = await supabase
+        .from('licenses')
+        .select('*');
+      
+      if (assetsError) throw assetsError;
+      if (licensesError) throw licensesError;
 
-    // Licenses Subscription
-    const licensesQuery = query(collection(db, 'licenses'));
-    const unsubscribeLicenses = onSnapshot(licensesQuery, (snapshot) => {
-      const licensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLicenses(licensesData);
-    }, (error) => {
-      console.error('Error fetching licenses:', error);
-    });
+      setAssets(assetsData || []);
+      setLicenses(licensesData || []);
+    } catch (error) {
+      console.error('Error fetching dashboard data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchData();
+    
+    // Subscribe to changes
+    const assetsChannel = supabase.channel('dashboard-assets')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, fetchData)
+      .subscribe();
+      
+    const licensesChannel = supabase.channel('dashboard-licenses')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'licenses' }, fetchData)
+      .subscribe();
 
     return () => {
-      unsubscribeAssets();
-      unsubscribeLicenses();
+      supabase.removeChannel(assetsChannel);
+      supabase.removeChannel(licensesChannel);
     };
   }, []);
 

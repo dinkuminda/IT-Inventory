@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 import { 
   UserPlus, 
   Search, 
@@ -49,18 +48,32 @@ export default function UserList() {
     newPassword: ''
   });
 
-  useEffect(() => {
-    const q = query(collection(db, 'profiles'), orderBy('displayName', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const usersData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setUsers(usersData);
-      setLoading(false);
-    }, (error) => {
+  const fetchUsers = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('displayName', { ascending: true });
+      
+      if (error) throw error;
+      setUsers(data || []);
+    } catch (error) {
       console.error('Error fetching users:', error);
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchUsers();
+    
+    const channel = supabase.channel('profiles-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, fetchUsers)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleDelete = async (userId: string) => {

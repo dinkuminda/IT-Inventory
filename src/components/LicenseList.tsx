@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -43,18 +42,32 @@ export default function LicenseList() {
     notes: ''
   });
 
-  useEffect(() => {
-    const q = query(collection(db, 'licenses'), orderBy('name', 'asc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const licensesData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setLicenses(licensesData);
-      setLoading(false);
-    }, (error) => {
+  const fetchLicenses = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('licenses')
+        .select('*')
+        .order('name', { ascending: true });
+      
+      if (error) throw error;
+      setLicenses(data || []);
+    } catch (error) {
       console.error('Error fetching licenses:', error);
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchLicenses();
+    
+    const channel = supabase.channel('licenses-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'licenses' }, fetchLicenses)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {

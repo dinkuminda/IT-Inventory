@@ -1,6 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { db } from '../firebase';
-import { collection, onSnapshot, query, orderBy } from 'firebase/firestore';
+import { supabase } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -52,18 +51,32 @@ export default function AssetList() {
     notes: ''
   });
 
-  useEffect(() => {
-    const q = query(collection(db, 'assets'), orderBy('updatedAt', 'desc'));
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const assetsData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setAssets(assetsData);
-      setLoading(false);
-    }, (error) => {
+  const fetchAssets = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('assets')
+        .select('*')
+        .order('updatedAt', { ascending: false });
+      
+      if (error) throw error;
+      setAssets(data || []);
+    } catch (error) {
       console.error('Error fetching assets:', error);
+    } finally {
       setLoading(false);
-    });
+    }
+  };
 
-    return () => unsubscribe();
+  useEffect(() => {
+    fetchAssets();
+    
+    const channel = supabase.channel('assets-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'assets' }, fetchAssets)
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, []);
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
