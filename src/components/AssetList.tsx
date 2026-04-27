@@ -36,7 +36,7 @@ export default function AssetList() {
   const [qrAsset, setQrAsset] = useState<any>(null);
   const [editingAsset, setEditingAsset] = useState<any>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<React.ReactNode>(null);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -166,6 +166,21 @@ export default function AssetList() {
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: 'Failed to save asset' }));
         let errorMessage = errorData.error || 'Failed to save asset';
+        
+        if (errorMessage.toLowerCase().includes('api key')) {
+          setError(
+            <div className="space-y-2">
+              <p className="font-bold">Invalid Supabase Service Role Key</p>
+              <p className="text-xs font-normal opacity-90">
+                The server is failing to authenticate with Supabase. Please ensure your 
+                <code className="bg-black/10 px-1 rounded mx-1">SUPABASE_SERVICE_ROLE_KEY</code> 
+                in the Secrets panel is correct. This should be the <code className="bg-black/10 px-1 rounded mx-1">service_role</code> / <code className="bg-black/10 px-1 rounded mx-1">secret</code> key, NOT the anon public key.
+              </p>
+            </div>
+          );
+          return;
+        }
+
         if (errorData.details) errorMessage += ` (Details: ${errorData.details})`;
         if (errorData.hint) errorMessage += ` (Hint: ${errorData.hint})`;
         if (errorData.code) errorMessage += ` [Code: ${errorData.code}]`;
