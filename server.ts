@@ -314,8 +314,14 @@ async function startServer() {
   } else {
     console.log('Serving static files from:', distPath);
     app.use(express.static(distPath));
-    app.get('(.*)', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+    
+    // Catch-all for SPA fallback
+    app.use((req, res, next) => {
+      if (req.method === 'GET' && !req.path.startsWith('/api')) {
+        res.sendFile(path.join(distPath, 'index.html'));
+      } else {
+        next();
+      }
     });
   }
 
