@@ -27,6 +27,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         fetchProfile(session.user.id);
       }
+    }).catch(err => {
+      console.error('Initial session fetch error:', err);
+    }).finally(() => {
       setLoading(false);
     });
 

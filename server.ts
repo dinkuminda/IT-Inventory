@@ -4,6 +4,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import { createClient } from "@supabase/supabase-js";
 import dotenv from "dotenv";
+import fs from "fs";
 
 dotenv.config();
 
@@ -22,49 +23,35 @@ const supabaseAdmin = SUPABASE_SERVICE_ROLE_KEY
     })
   : null;
 
+process.on('uncaughtException', (err) => {
+  console.error('UNCAUGHT EXCEPTION:', err);
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('UNHANDLED REJECTION at:', promise, 'reason:', reason);
+});
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
 
-  console.log('Initializing ICS IT Admin Server... (Supabase)');
-  if (!SUPABASE_SERVICE_ROLE_KEY) {
-    console.warn('WARNING: SUPABASE_SERVICE_ROLE_KEY is not set. Administrative actions will fail.');
-  }
+  console.log('Initializing IT Inventory Mgt Server...');
+  
   app.use(express.json({ limit: '50mb' }));
   app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
   app.use((req, res, next) => {
-    console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
+    // Hidden logging to keep logs clean but available if needed
+    // console.log(`${new Date().toISOString()} - ${req.method} ${req.url}`);
     next();
   });
 
+  // API Routes
   app.get("/api/health", async (req, res) => {
-    let supabaseStatus = "not_configured";
-    let assetsTableStatus = "unknown";
-    
-    if (supabaseAdmin) {
-      try {
-        const { data, error } = await supabaseAdmin.from('assets').select('*').limit(1);
-        if (error) {
-          supabaseStatus = "error";
-          assetsTableStatus = error.message;
-        } else {
-          supabaseStatus = "ok";
-          assetsTableStatus = "ok";
-        }
-      } catch (e: any) {
-        supabaseStatus = "exception";
-        assetsTableStatus = e.message;
-      }
-    }
-
     res.json({ 
       status: "ok", 
-      supabaseConfigured: !!supabaseAdmin,
-      supabaseStatus,
-      assetsTableStatus,
-      env: process.env.NODE_ENV,
-      time: new Date().toISOString()
+      time: new Date().toISOString(),
+      env: process.env.NODE_ENV
     });
   });
 
@@ -302,74 +289,92 @@ async function startServer() {
     }
   });
 
-  app.all("/api/*", (req, res) => {
+  app.all("/api/*all", (req, res) => {
     res.status(404).json({ error: "API route not found" });
   });
 
-  if (process.env.NODE_ENV !== "production") {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: "spa",
-    });
-    app.use(vite.middlewares);
+  const isProduction = process.env.NODE_ENV === "production";
+  const distPath = path.join(process.cwd(), 'dist');
+  
+  const useStatic = isProduction && fs.existsSync(path.join(distPath, 'index.html'));
+
+  if (!useStatic) {
+    console.log('Initializing Vite in middleware mode...');
+    try {
+      const vite = await createViteServer({
+        server: { middlewareMode: true },
+        appType: "spa",
+        root: process.cwd()
+      });
+      app.use(vite.middlewares);
+      console.log('Vite middleware mounted.');
+    } catch (viteError) {
+      console.error('Vite initialization failed:', viteError);
+    }
   } else {
-    const distPath = path.join(process.cwd(), 'dist');
+    console.log('Serving static files from:', distPath);
     app.use(express.static(distPath));
-    app.get('*', (req, res) => {
+    app.get('*all', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
 
-  app.listen(PORT, "0.0.0.0", async () => {
-    console.log(`Server is listening on 0.0.0.0:${PORT}`);
-    
-    // Auto-bootstrap if env vars are present
-    const adminEmail = process.env.ADMIN_EMAIL;
-    const adminPass = process.env.ADMIN_PASSWORD;
-    
-    if (adminEmail && adminPass && supabaseAdmin) {
-      console.log(`Attempting auto-bootstrap for ${adminEmail}...`);
-      try {
-        const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
-          email: adminEmail,
-          password: adminPass,
-          email_confirm: true,
-          user_metadata: { full_name: 'Default Admin' }
-        });
+  // Auto-bootstrap if env vars are present
+  const adminEmail = process.env.ADMIN_EMAIL;
+  const adminPass = process.env.ADMIN_PASSWORD;
 
-        let userId = userData.user?.id;
+  if (adminEmail && adminPass && supabaseAdmin) {
+    console.log(`Attempting auto-bootstrap for ${adminEmail}...`);
+    try {
+      const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
+        email: adminEmail,
+        password: adminPass,
+        email_confirm: true,
+        user_metadata: { full_name: 'Default Admin' }
+      });
 
-        if (userError && userError.message.includes('already registered')) {
-          const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
-          const users = listData?.users || [];
-          const target = users.find(u => u.email === adminEmail);
-          if (target) userId = target.id;
-        } else if (userError) {
-          throw userError;
-        }
+      let userId = userData.user?.id;
 
-        if (userId) {
-          const { error: profileError } = await supabaseAdmin
-            .from('profiles')
-            .upsert([{
-              id: userId,
-              email: adminEmail,
-              displayName: 'Default Admin',
-              department: 'IT Admin',
-              role: 'admin',
-              needsPasswordChange: false
-            }]);
-          
-          if (profileError) throw profileError;
-          console.log(`Admin ${adminEmail} is ready.`);
-        }
-      } catch (err) {
-        console.error('Auto-bootstrap failed:', err);
+      if (userError && userError.message.includes('already registered')) {
+        const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+        const users = listData?.users || [];
+        const target = users.find(u => u.email === adminEmail);
+        if (target) userId = target.id;
+      } else if (userError) {
+        throw userError;
       }
+
+      if (userId) {
+        await supabaseAdmin
+          .from('profiles')
+          .upsert([{
+            id: userId,
+            email: adminEmail,
+            displayName: 'Default Admin',
+            department: 'IT Admin',
+            role: 'admin',
+            needsPasswordChange: false
+          }]);
+        console.log(`Admin ${adminEmail} is ready.`);
+      }
+    } catch (err) {
+      console.error('Auto-bootstrap failed:', err);
     }
-  });
+  }
+
+  // Bind to port 3000
+  if (!process.env.VERCEL) {
+    app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server is listening on 0.0.0.0:${PORT}`);
+    });
+  }
+
+  return app;
 }
 
-startServer().catch(err => {
-  console.error('Failed to start server:', err);
+export const appPromise = startServer();
+
+appPromise.catch(err => {
+  console.error('FATAL SERVER STARTUP ERROR:', err);
+  process.exit(1);
 });
