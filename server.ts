@@ -289,7 +289,7 @@ async function startServer() {
     }
   });
 
-  app.all("/api/*all", (req, res) => {
+  app.use("/api", (req, res) => {
     res.status(404).json({ error: "API route not found" });
   });
 
@@ -314,7 +314,7 @@ async function startServer() {
   } else {
     console.log('Serving static files from:', distPath);
     app.use(express.static(distPath));
-    app.get('*all', (req, res) => {
+    app.get('(.*)', (req, res) => {
       res.sendFile(path.join(distPath, 'index.html'));
     });
   }
