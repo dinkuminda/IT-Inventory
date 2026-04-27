@@ -7,7 +7,7 @@ export default function Login() {
   const { login, register, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [error, setError] = useState('');
+  const [error, setError] = useState<React.ReactNode>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (loading) {
@@ -25,7 +25,16 @@ export default function Login() {
     try {
       await login(email, password);
     } catch (err: any) {
-      setError(err.message || 'Authentication failed');
+      if (err.message?.includes('API key') || err.message?.includes('apiKey') || err.message?.includes('invalid')) {
+        setError(
+          <div>
+            <p className="font-bold mb-1">Invalid API Key</p>
+            <p className="font-normal opacity-90">Please ensure <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_PUBLIC_KEY</code> in your Secrets is set to your Supabase <code className="bg-black/10 px-1 rounded">anon</code> <code className="bg-black/10 px-1 rounded">public</code> key.</p>
+          </div>
+        );
+      } else {
+        setError(err.message || 'Authentication failed');
+      }
     } finally {
       setIsSubmitting(false);
     }
