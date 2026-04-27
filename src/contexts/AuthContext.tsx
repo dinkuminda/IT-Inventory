@@ -22,13 +22,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        if (error.message.includes('API key')) {
+          console.error('Supabase API key is invalid. Please check your VITE_SUPABASE_PUBLIC_KEY.');
+        } else {
+          console.error('Initial session fetch error:', error.message);
+        }
+      }
       setUser(session?.user ?? null);
       if (session?.user) {
         fetchProfile(session.user.id);
       }
     }).catch(err => {
-      console.error('Initial session fetch error:', err);
+      console.error('Initial session fetch failed unexpectedly:', err);
     }).finally(() => {
       setLoading(false);
     });
