@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
-import { Package, LogIn, ShieldCheck, Laptop, Key, Users, Mail, Lock, UserPlus } from 'lucide-react';
+import { Package, LogIn, ShieldCheck, Laptop, Key, Users, Mail, Lock, UserPlus, User, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { cn } from '../lib/utils';
 
 export default function Login() {
-  const { login, register, loading } = useAuth();
+  const { login, loading } = useAuth();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<React.ReactNode>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -30,6 +32,13 @@ export default function Login() {
           <div>
             <p className="font-bold mb-1">Invalid API Key</p>
             <p className="font-normal opacity-90">Please ensure <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_PUBLIC_KEY</code> in your Secrets is set to your Supabase <code className="bg-black/10 px-1 rounded">anon</code> <code className="bg-black/10 px-1 rounded">public</code> key.</p>
+          </div>
+        );
+      } else if (err.message?.toLowerCase().includes('invalid login credentials')) {
+        setError(
+          <div>
+            <p className="font-bold mb-1">Invalid Credentials</p>
+            <p className="font-normal opacity-90 text-[10px]">Please double-check your email and password. If you just had your account enabled, ensure you are using the initial password provided by your administrator.</p>
           </div>
         );
       } else {
@@ -59,7 +68,7 @@ export default function Login() {
                 required
                 type="email"
                 placeholder="admin@assetflow.com"
-                className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all"
+                className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-sans"
                 value={email}
                 onChange={(e) => setEmail(e.target.value.trim())}
               />
@@ -72,12 +81,21 @@ export default function Login() {
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
               <input
                 required
-                type="password"
+                type={showPassword ? "text" : "password"}
+                minLength={6}
                 placeholder="••••••••"
-                className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all"
+                className="w-full pl-12 pr-12 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-mono"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
               />
+              <button 
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 transition-colors"
+                tabIndex={-1}
+              >
+                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
             </div>
           </div>
 

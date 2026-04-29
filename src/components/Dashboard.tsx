@@ -20,20 +20,23 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   XCircle,
-  Package
+  Package,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion } from 'framer-motion';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function Dashboard() {
-  const { isAdmin, profile } = useAuth();
+  const { user, isAdmin, profile } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const fetchData = async () => {
     try {
+      setError(null);
       const { data: assetsData, error: assetsError } = await supabase
         .from('assets')
         .select('*');
@@ -47,8 +50,18 @@ export default function Dashboard() {
 
       setAssets(assetsData || []);
       setLicenses(licensesData || []);
-    } catch (error) {
-      console.error('Error fetching dashboard data:', error);
+    } catch (err: any) {
+      console.error('Error fetching dashboard data:', err);
+      // Check for common Supabase errors
+      if (err.message?.includes('API key')) {
+        setError('Invalid Supabase API Key. Please check your VITE_SUPABASE_PUBLIC_KEY in the Secrets panel.');
+      } else if (err.code === 'PGRST116' || err.message?.includes('relation "public.assets" does not exist') || err.message?.includes('schema cache')) {
+        setError('Database tables missing. Please run the SQL setup script in your Supabase SQL Editor using the SCHEMA.sql file provided in this project.');
+      } else if (err.message?.includes('recursion')) {
+        setError('Database security policy error (infinite recursion). Please re-run the updated SCHEMA.sql in your Supabase SQL Editor to fix the RLS policies.');
+      } else {
+        setError(err.message || 'An unexpected error occurred while fetching dashboard data.');
+      }
     } finally {
       setLoading(false);
     }
@@ -72,10 +85,12 @@ export default function Dashboard() {
     };
   }, []);
 
-  const myAssets = assets.filter(a => a.assignedTo === profile?.email);
-  const myPending = assets.filter(a => a.assignedTo === profile?.email && a.approvalStatus === 'Pending');
-  const myApproved = assets.filter(a => a.assignedTo === profile?.email && a.approvalStatus === 'Approved');
-  const myRejected = assets.filter(a => a.assignedTo === profile?.email && a.approvalStatus === 'Rejected');
+  const userEmail = profile?.email || user?.email;
+  const myAssets = assets.filter(a => a.assignedTo && userEmail && a.assignedTo.trim().toLowerCase() === userEmail.trim().toLowerCase());
+  const myLicenses = licenses.filter(l => l.assignedTo && userEmail && l.assignedTo.trim().toLowerCase() === userEmail.trim().toLowerCase());
+  const myPending = myAssets.filter(a => a.approvalStatus === 'Pending');
+  const myApproved = myAssets.filter(a => a.approvalStatus === 'Approved');
+  const myRejected = myAssets.filter(a => a.approvalStatus === 'Rejected');
 
   const adminStats = [
     { 
@@ -118,7 +133,15 @@ export default function Dashboard() {
       value: myAssets.length, 
       icon: Laptop, 
       color: 'bg-blue-500',
-      trend: 'Assigned',
+      trend: 'Hardware',
+      trendUp: true
+    },
+    { 
+      label: 'My Licenses', 
+      value: myLicenses.length, 
+      icon: Key, 
+      color: 'bg-indigo-500',
+      trend: 'Software',
       trendUp: true
     },
     { 
@@ -130,19 +153,11 @@ export default function Dashboard() {
       trendUp: null
     },
     { 
-      label: 'Approved Assets', 
-      value: myApproved.length, 
-      icon: CheckCircle2, 
-      color: 'bg-green-500',
-      trend: 'Verified',
-      trendUp: true
-    },
-    { 
       label: 'Rejected Requests', 
       value: myRejected.length, 
       icon: XCircle, 
       color: 'bg-red-500',
-      trend: 'Action Needed',
+      trend: 'Review',
       trendUp: false
     },
   ];
@@ -167,18 +182,47 @@ export default function Dashboard() {
     );
   }
 
+  if (error) {
+    return (
+      <div className="h-[400px] flex flex-col items-center justify-center p-8 bg-red-50 border border-red-100 rounded-3xl text-center">
+        <ShieldAlert className="w-12 h-12 text-red-500 mb-4" />
+        <h3 className="text-xl font-bold text-red-900 mb-2">Connection Error</h3>
+        <p className="text-red-700 max-w-md mb-6">{error}</p>
+        <button 
+          onClick={() => fetchData()}
+          className="px-6 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+        >
+          Try Again
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
       {/* Welcome Header */}
-      <div className="flex flex-col gap-1">
-        <h1 className="text-3xl font-bold tracking-tight text-neutral-900">
-          Welcome back, {profile?.displayName?.split(' ')[0] || 'User'}
-        </h1>
-        <p className="text-neutral-500">
-          {isAdmin 
-            ? "Here's the global overview of your organization's IT inventory." 
-            : "Here's a summary of your assigned assets and pending requests."}
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-3xl font-bold tracking-tight text-neutral-900">
+            Welcome back, {profile?.displayName?.split(' ')[0] || 'User'}
+          </h1>
+          <p className="text-neutral-500">
+            {isAdmin 
+              ? "Here's the global overview of your organization's IT inventory." 
+              : "Here's a summary of your assigned assets and pending requests."}
+          </p>
+        </div>
+        {!isAdmin && (
+          <div className="flex items-center gap-4 p-4 bg-white rounded-2xl border border-neutral-200 shadow-sm">
+            <div className="w-12 h-12 rounded-xl bg-neutral-900 flex items-center justify-center text-white text-xl font-bold">
+              {profile?.displayName?.charAt(0) || profile?.email?.charAt(0)}
+            </div>
+            <div>
+              <p className="text-sm font-bold text-neutral-900">{profile?.displayName}</p>
+              <p className="text-xs text-neutral-500">{profile?.department || 'Employee'}</p>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Stats Grid */}

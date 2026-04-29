@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase, logAction } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -17,7 +17,8 @@ import {
   ShieldAlert,
   ClipboardList,
   Laptop,
-  Clock
+  Clock,
+  Users
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,15 +27,17 @@ import Papa from 'papaparse';
 import { QRCodeSVG } from 'qrcode.react';
 
 export default function AssetList() {
-  const { isAdmin, profile } = useAuth();
+  const { user, isAdmin, profile } = useAuth();
   const [assets, setAssets] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterType, setFilterType] = useState('All');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isQrModalOpen, setIsQrModalOpen] = useState(false);
   const [qrAsset, setQrAsset] = useState<any>(null);
   const [editingAsset, setEditingAsset] = useState<any>(null);
+  const [users, setUsers] = useState<any[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<React.ReactNode>(null);
 
@@ -53,6 +56,7 @@ export default function AssetList() {
 
   const fetchAssets = async () => {
     try {
+      setFetchError(null);
       const { data, error } = await supabase
         .from('assets')
         .select('*')
@@ -60,8 +64,22 @@ export default function AssetList() {
       
       if (error) throw error;
       setAssets(data || []);
-    } catch (error) {
+      
+      // Fetch employees for the dropdown
+      const { data: employeeData } = await supabase
+        .from('employees')
+        .select('email, fullName, department')
+        .order('fullName', { ascending: true });
+      setUsers(employeeData || []);
+    } catch (error: any) {
       console.error('Error fetching assets:', error);
+      let msg = error.message || 'Failed to connect to the database.';
+      if (msg.includes('relation') || msg.includes('schema cache')) {
+        msg = 'Database tables missing. Please run the SCHEMA.sql script in Supabase.';
+      } else if (msg.includes('recursion')) {
+        msg = 'Policy recursion error. Please re-run the updated SCHEMA.sql in Supabase.';
+      }
+      setFetchError(msg);
     } finally {
       setLoading(false);
     }
@@ -119,6 +137,7 @@ export default function AssetList() {
             if (!response.ok) throw new Error('Failed to import assets');
             
             count = assetsToInsert.length;
+            await logAction('Import Assets', 'Asset', undefined, { count });
             alert(`Successfully imported ${count} assets.`);
           } catch (error: any) {
             console.error('Error importing assets:', error);
@@ -141,6 +160,16 @@ export default function AssetList() {
     link.click();
     document.body.removeChild(link);
   };
+
+  useEffect(() => {
+    if (isModalOpen && !editingAsset) {
+      const email = profile?.email || user?.email || '';
+      setFormData(prev => ({
+        ...prev,
+        assignedTo: isAdmin ? '' : email
+      }));
+    }
+  }, [isModalOpen, editingAsset, profile, user, isAdmin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -187,6 +216,13 @@ export default function AssetList() {
         throw new Error(errorMessage);
       }
       
+      if (editingAsset) {
+        await logAction('Update Asset', 'Asset', editingAsset.id, { name: formData.name });
+      } else {
+        // We don't have the new ID easily from a fetch POST, but we can log the name
+        await logAction('Create Asset', 'Asset', undefined, { name: formData.name });
+      }
+
       setIsModalOpen(false);
       setEditingAsset(null);
       setFormData({
@@ -210,12 +246,20 @@ export default function AssetList() {
         body: JSON.stringify({ id })
       });
       if (!response.ok) throw new Error('Failed to delete asset');
+      await logAction('Delete Asset', 'Asset', id);
+      fetchAssets(); // Refresh list manually
+      setIsModalOpen(false); // Close modal if open
+      setEditingAsset(null);
     } catch (error: any) {
       alert(error.message);
     }
   };
 
+  const userEmail = (profile?.email || user?.email || '').trim().toLowerCase();
   const filteredAssets = assets.filter(asset => {
+    // Non-admins can only see assets assigned to them
+    if (!isAdmin && asset.assignedTo?.trim().toLowerCase() !== userEmail) return false;
+
     const matchesSearch = 
       asset.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       asset.serialNumber?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -232,24 +276,28 @@ export default function AssetList() {
           <p className="text-sm text-neutral-500">Manage and track hardware inventory</p>
         </div>
         <div className="flex items-center gap-2">
-          <button 
-            onClick={handleExport}
-            className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all"
-          >
-            <Download size={16} />
-            Export
-          </button>
-          <label className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all cursor-pointer">
-            <Upload size={16} />
-            Import
-            <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
-          </label>
+          {isAdmin && (
+            <>
+              <button 
+                onClick={handleExport}
+                className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all"
+              >
+                <Download size={16} />
+                Export
+              </button>
+              <label className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all cursor-pointer">
+                <Upload size={16} />
+                Import
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+              </label>
+            </>
+          )}
           <button 
             onClick={() => { setEditingAsset(null); setIsModalOpen(true); }}
             className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200"
           >
             <Plus size={16} />
-            Add Asset
+            {isAdmin ? 'Add Asset' : 'Request Asset'}
           </button>
         </div>
       </div>
@@ -297,7 +345,23 @@ export default function AssetList() {
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {loading ? (
+              {fetchError ? (
+                <tr>
+                  <td colSpan={5} className="px-6 py-12 text-center text-red-500">
+                    <div className="flex flex-col items-center gap-2">
+                      <AlertCircle className="w-8 h-8 mx-auto" />
+                      <p className="font-bold">Connection Error</p>
+                      <p className="text-sm opacity-80">{fetchError}</p>
+                      <button 
+                        onClick={() => fetchAssets()}
+                        className="mt-2 px-4 py-1 bg-red-100 text-red-700 rounded-lg text-xs font-bold hover:bg-red-200 transition-colors"
+                      >
+                        Retry
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ) : loading ? (
                 <tr>
                   <td colSpan={5} className="px-6 py-12 text-center">
                     <Loader2 className="w-8 h-8 animate-spin mx-auto text-neutral-300" />
@@ -380,6 +444,7 @@ export default function AssetList() {
                                   })
                                 });
                                 if (!response.ok) throw new Error('Failed to approve asset');
+                                await logAction('Approve Asset', 'Asset', asset.id);
                               } catch (error: any) {
                                 alert(error.message);
                               }
@@ -401,6 +466,7 @@ export default function AssetList() {
                                   })
                                 });
                                 if (!response.ok) throw new Error('Failed to reject asset');
+                                await logAction('Reject Asset', 'Asset', asset.id);
                               } catch (error: any) {
                                 alert(error.message);
                               }
@@ -419,7 +485,7 @@ export default function AssetList() {
                       >
                         <QrCode size={16} />
                       </button>
-                      {(isAdmin || asset.assignedTo === profile?.email) && (
+                      {(isAdmin || (asset.assignedTo && userEmail && asset.assignedTo.trim().toLowerCase() === userEmail.trim().toLowerCase())) && (
                         <button 
                           onClick={() => { setEditingAsset(asset); setIsModalOpen(true); }}
                           className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
@@ -540,27 +606,58 @@ export default function AssetList() {
                       <option value="Other">Other</option>
                     </select>
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Status</label>
-                    <select 
-                      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 transition-all"
-                      value={formData.status}
-                      onChange={e => setFormData({ ...formData, status: e.target.value })}
-                    >
-                      <option value="In Stock">In Stock</option>
-                      <option value="Assigned">Assigned</option>
-                      <option value="Maintenance">Maintenance</option>
-                      <option value="Retired">Retired</option>
-                    </select>
-                  </div>
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Assigned To (Email)</label>
-                    <input 
-                      className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all"
-                      value={formData.assignedTo}
-                      onChange={e => setFormData({ ...formData, assignedTo: e.target.value })}
-                    />
-                  </div>
+                  {isAdmin && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Status</label>
+                      <select 
+                        className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 transition-all font-bold"
+                        value={formData.status}
+                        onChange={e => setFormData({ ...formData, status: e.target.value })}
+                      >
+                        <option value="In Stock">In Stock</option>
+                        <option value="Assigned">Assigned</option>
+                        <option value="Maintenance">Maintenance</option>
+                        <option value="Retired">Retired</option>
+                      </select>
+                    </div>
+                  )}
+                  {isAdmin && (
+                    <div className="space-y-1.5">
+                      <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Assigned To</label>
+                      <div className="relative group/select">
+                        <select 
+                          className="w-full px-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 transition-all appearance-none font-bold"
+                          value={formData.assignedTo}
+                          onChange={e => {
+                            const val = e.target.value;
+                            setFormData({ ...formData, assignedTo: val });
+                            const selectedUser = users.find(u => u.email === val);
+                            if (selectedUser?.department) {
+                              setFormData(prev => ({ ...prev, roles: selectedUser.department }));
+                            }
+                          }}
+                        >
+                          <option value="">Unassigned</option>
+                          {users.map(u => (
+                            <option key={u.email} value={u.email}>
+                              {u.fullName || u.email} ({u.email})
+                            </option>
+                          ))}
+                        </select>
+                        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-neutral-400">
+                          <Users size={16} />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  {!isAdmin && (
+                     <div className="space-y-1.5">
+                        <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Assignment Info</label>
+                        <div className="px-4 py-3 bg-neutral-50 border border-neutral-100 rounded-2xl text-sm font-bold text-neutral-400">
+                          {formData.assignedTo || 'Unassigned'} • {formData.status}
+                        </div>
+                     </div>
+                  )}
                   <div className="space-y-1.5">
                     <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Role / Division</label>
                     <select 
@@ -596,21 +693,33 @@ export default function AssetList() {
                   />
                 </div>
 
-                <div className="pt-4 flex gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className="flex-[2] py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : (editingAsset ? 'Update Asset' : 'Create Asset')}
-                  </button>
+                <div className="pt-4 flex flex-col sm:flex-row gap-3">
+                  {editingAsset && isAdmin && (
+                    <button 
+                      type="button"
+                      onClick={() => handleDelete(editingAsset.id)}
+                      className="py-4 px-6 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={20} />
+                      <span className="sm:hidden lg:inline">Delete Asset</span>
+                    </button>
+                  )}
+                  <div className="flex-1 flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={isSubmitting}
+                      className="flex-[2] py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : (editingAsset ? 'Update Asset' : 'Create Asset')}
+                    </button>
+                  </div>
                 </div>
               </form>
             </motion.div>

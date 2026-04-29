@@ -5,7 +5,9 @@ import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
 import LicenseList from './components/LicenseList';
-import UserList from './components/UserList';
+import EmployeeList from './components/EmployeeList';
+import Maintenance from './components/Maintenance';
+import AuditLogs from './components/AuditLogs';
 import Login from './components/Login';
 import ChangePassword from './components/ChangePassword';
 
@@ -60,7 +62,9 @@ function AppContent() {
       {activeTab === 'dashboard' && <Dashboard />}
       {activeTab === 'assets' && <AssetList />}
       {activeTab === 'licenses' && <LicenseList />}
-      {activeTab === 'users' && <UserList />}
+      {activeTab === 'maintenance' && <Maintenance />}
+      {activeTab === 'employees' && <EmployeeList />}
+      {activeTab === 'logs' && <AuditLogs />}
       {activeTab === 'security' && <ChangePassword />}
     </Layout>
   );

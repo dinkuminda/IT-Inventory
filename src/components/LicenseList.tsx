@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase, logAction } from '../supabaseClient';
 import { 
   Plus, 
   Search, 
@@ -22,9 +22,10 @@ import { useAuth } from '../contexts/AuthContext';
 import Papa from 'papaparse';
 
 export default function LicenseList() {
-  const { isAdmin } = useAuth();
+  const { user, isAdmin, profile } = useAuth();
   const [licenses, setLicenses] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingLicense, setEditingLicense] = useState<any>(null);
@@ -44,6 +45,7 @@ export default function LicenseList() {
 
   const fetchLicenses = async () => {
     try {
+      setFetchError(null);
       const { data, error } = await supabase
         .from('licenses')
         .select('*')
@@ -51,8 +53,15 @@ export default function LicenseList() {
       
       if (error) throw error;
       setLicenses(data || []);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error fetching licenses:', error);
+      let msg = error.message || 'Failed to connect to the database.';
+      if (msg.includes('relation') || msg.includes('schema cache')) {
+        msg = 'Database tables missing. Please run the SCHEMA.sql script in Supabase.';
+      } else if (msg.includes('recursion')) {
+        msg = 'Policy recursion error. Please re-run the updated SCHEMA.sql in Supabase.';
+      }
+      setFetchError(msg);
     } finally {
       setLoading(false);
     }
@@ -97,6 +106,7 @@ export default function LicenseList() {
               body: JSON.stringify({ payload: licensesToInsert })
             });
             if (!response.ok) throw new Error('Failed to import licenses');
+            await logAction('Import Licenses', 'License', undefined, { count: licensesToInsert.length });
             alert(`Successfully imported ${licensesToInsert.length} licenses.`);
           } catch (error: any) {
             alert(error.message);
@@ -145,6 +155,12 @@ export default function LicenseList() {
         throw new Error(errorMessage);
       }
       
+      if (editingLicense) {
+        await logAction('Update License', 'License', editingLicense.id, { name: formData.name });
+      } else {
+        await logAction('Create License', 'License', undefined, { name: formData.name });
+      }
+
       setIsModalOpen(false);
       setEditingLicense(null);
       setFormData({
@@ -167,15 +183,23 @@ export default function LicenseList() {
         body: JSON.stringify({ id })
       });
       if (!response.ok) throw new Error('Failed to delete license');
+      await logAction('Delete License', 'License', id);
+      fetchLicenses(); // Refresh manually
+      setIsModalOpen(false);
+      setEditingLicense(null);
     } catch (error: any) {
       alert(error.message);
     }
   };
 
-  const filteredLicenses = licenses.filter(license => 
-    license.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-    license.vendor?.toLowerCase().includes(searchTerm.toLowerCase())
-  );
+  const userEmail = (profile?.email || user?.email || '').trim().toLowerCase();
+  const filteredLicenses = licenses.filter(license => {
+    // Non-admins can only see licenses assigned to them
+    if (!isAdmin && license.assignedTo?.trim().toLowerCase() !== userEmail) return false;
+
+    return license.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           license.vendor?.toLowerCase().includes(searchTerm.toLowerCase());
+  });
 
   return (
     <div className="space-y-6">
@@ -185,18 +209,22 @@ export default function LicenseList() {
           <p className="text-sm text-neutral-500">Manage keys and seat allocations</p>
         </div>
         <div className="flex items-center gap-2">
-          <label className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all cursor-pointer">
-            <Upload size={16} />
-            Import
-            <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
-          </label>
-          <button 
-            onClick={() => { setEditingLicense(null); setIsModalOpen(true); }}
-            className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200"
-          >
-            <Plus size={16} />
-            Add License
-          </button>
+          {isAdmin && (
+            <>
+              <label className="flex items-center gap-2 px-4 py-2 bg-white border border-neutral-200 rounded-xl text-sm font-bold hover:bg-neutral-50 transition-all cursor-pointer">
+                <Upload size={16} />
+                Import
+                <input type="file" accept=".csv" className="hidden" onChange={handleImport} />
+              </label>
+              <button 
+                onClick={() => { setEditingLicense(null); setIsModalOpen(true); }}
+                className="flex items-center gap-2 px-4 py-2 bg-neutral-900 text-white rounded-xl text-sm font-bold hover:bg-neutral-800 transition-all shadow-lg shadow-neutral-200"
+              >
+                <Plus size={16} />
+                Add License
+              </button>
+            </>
+          )}
         </div>
       </div>
 
@@ -214,7 +242,19 @@ export default function LicenseList() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {loading ? (
+        {fetchError ? (
+          <div className="col-span-full py-20 text-center bg-red-50 rounded-3xl border border-red-100 text-red-700">
+            <ShieldAlert className="w-12 h-12 mx-auto mb-4" />
+            <p className="font-bold">Connection Error</p>
+            <p className="text-sm opacity-80 mb-4">{fetchError}</p>
+            <button 
+              onClick={() => fetchLicenses()}
+              className="px-6 py-2 bg-red-600 text-white rounded-xl font-bold hover:bg-red-700 transition-all shadow-lg shadow-red-200"
+            >
+              Retry
+            </button>
+          </div>
+        ) : loading ? (
           <div className="col-span-full py-20 text-center">
             <Loader2 className="w-10 h-10 animate-spin mx-auto text-neutral-300" />
           </div>
@@ -233,33 +273,38 @@ export default function LicenseList() {
               <div className="p-3 bg-neutral-900 text-white rounded-2xl">
                 <Key size={24} />
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button 
-                  onClick={() => {
-                    setEditingLicense(license);
-                    setFormData({
-                      name: license.name,
-                      vendor: license.vendor,
-                      key: license.key,
-                      seats: license.seats,
-                      usedSeats: license.usedSeats,
-                      expiryDate: license.expiryDate || '',
-                      department: license.department,
-                      notes: license.notes || ''
-                    });
-                    setIsModalOpen(true);
-                  }}
-                  className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
-                >
-                  <Edit2 size={16} />
-                </button>
-                <button 
-                  onClick={() => handleDelete(license.id)}
-                  className="p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-600 transition-colors"
-                >
-                  <Trash2 size={16} />
-                </button>
-              </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {isAdmin && (
+                      <>
+                        <button 
+                          onClick={() => {
+                            setEditingLicense(license);
+                            setFormData({
+                              name: license.name,
+                              vendor: license.vendor,
+                              key: license.key,
+                              seats: license.seats,
+                              usedSeats: license.usedSeats,
+                              expiryDate: license.expiryDate || '',
+                              department: license.department,
+                              notes: license.notes || ''
+                            });
+                            setIsModalOpen(true);
+                          }}
+                          className="p-2 hover:bg-neutral-100 rounded-lg text-neutral-400 hover:text-neutral-900 transition-colors"
+                        >
+                          <Edit2 size={16} />
+                        </button>
+                        <button 
+                          onClick={() => handleDelete(license.id)}
+                          className="p-2 hover:bg-red-50 rounded-lg text-neutral-400 hover:text-red-600 transition-colors"
+                          title="Delete License"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </>
+                    )}
+                  </div>
             </div>
 
             <h3 className="text-lg font-bold tracking-tight mb-1">{license.name}</h3>
@@ -404,21 +449,33 @@ export default function LicenseList() {
                   </div>
                 </div>
 
-                <div className="pt-4 flex gap-3">
-                  <button 
-                    type="button"
-                    onClick={() => setIsModalOpen(false)}
-                    className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
-                  >
-                    Cancel
-                  </button>
-                  <button 
-                    type="submit" 
-                    disabled={isSubmitting}
-                    className="flex-[2] py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 disabled:opacity-50 flex items-center justify-center gap-2"
-                  >
-                    {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : (editingLicense ? 'Update License' : 'Create License')}
-                  </button>
+                <div className="pt-4 flex flex-col sm:flex-row gap-3">
+                  {editingLicense && isAdmin && (
+                    <button 
+                      type="button"
+                      onClick={() => handleDelete(editingLicense.id)}
+                      className="py-4 px-6 bg-red-50 text-red-600 rounded-2xl font-bold hover:bg-red-100 transition-all flex items-center justify-center gap-2"
+                    >
+                      <Trash2 size={20} />
+                      <span>Delete License</span>
+                    </button>
+                  )}
+                  <div className="flex-1 flex gap-3">
+                    <button 
+                      type="button"
+                      onClick={() => setIsModalOpen(false)}
+                      className="flex-1 py-4 bg-neutral-100 text-neutral-600 rounded-2xl font-bold hover:bg-neutral-200 transition-all"
+                    >
+                      Cancel
+                    </button>
+                    <button 
+                      type="submit" 
+                      disabled={isSubmitting}
+                      className="flex-[2] py-4 bg-neutral-900 text-white rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {isSubmitting ? <Loader2 size={20} className="animate-spin" /> : (editingLicense ? 'Update License' : 'Create License')}
+                    </button>
+                  </div>
                 </div>
               </form>
             </motion.div>

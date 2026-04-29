@@ -62,11 +62,27 @@ export default function ChangePassword() {
           <h1 className="text-3xl font-bold tracking-tight text-neutral-900 mb-2">
             {isForced ? 'Update Password' : 'Change Password'}
           </h1>
-          <p className="text-neutral-500 mb-8">
+          <p className="text-neutral-500 mb-6">
             {isForced 
               ? 'Your administrator requires you to change your password before continuing.'
               : 'Update your account password to keep your account secure.'}
           </p>
+
+          <div className="mb-8 p-6 bg-neutral-50 rounded-[2rem] border border-neutral-100 flex items-center gap-4">
+            <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center text-neutral-900 font-black shadow-sm border border-neutral-200 uppercase">
+              {profile?.displayName?.charAt(0) || profile?.email?.charAt(0)}
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-black text-neutral-900 truncate tracking-tight">{profile?.displayName}</p>
+              <p className="text-xs text-neutral-500 truncate mb-1">{profile?.email}</p>
+              <div className="flex items-center gap-1.5">
+                <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-600 rounded text-[8px] font-black uppercase tracking-widest">{profile?.role}</span>
+                {profile?.department && (
+                  <span className="px-1.5 py-0.5 bg-neutral-200 text-neutral-600 rounded text-[8px] font-black uppercase tracking-widest">{profile.department}</span>
+                )}
+              </div>
+            </div>
+          </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             {error && (

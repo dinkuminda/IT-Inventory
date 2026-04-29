@@ -68,7 +68,7 @@ async function startServer() {
       // 1. Create or update the Auth user
       const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password,
+        password: password.trim(),
         email_confirm: true,
         user_metadata: { full_name: 'System Admin' }
       });
@@ -83,7 +83,10 @@ async function startServer() {
           const target = users.find(u => u.email === email);
           if (target) {
             userId = target.id;
-            const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { password });
+            const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(userId, { 
+              password: password.trim(),
+              email_confirm: true 
+            });
             if (updateError) throw updateError;
           }
         } else {
@@ -117,35 +120,115 @@ async function startServer() {
   // Admin User Creation Endpoint
   app.post("/api/admin/create-user", async (req, res) => {
     if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
-    const { email, password, fullName, department } = req.body;
+    const { email, password, fullName, department, role } = req.body;
+
+    if (!email || !password || !fullName) {
+      return res.status(400).json({ error: "Email, password, and full name are required" });
+    }
 
     try {
-      const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+      console.log(`[Admin] Checking for existing profile for: ${email}`);
+      const { data: existingProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('id, email')
+        .eq('email', email)
+        .single();
+
+      if (existingProfile) {
+        // If profile exists but we are creating a new user, check if the auth user exists
+        const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(existingProfile.id);
+        if (!authUser) {
+          console.log(`[Admin] Found orphaned profile for ${email}, cleaning up...`);
+          await supabaseAdmin.from('profiles').delete().eq('id', existingProfile.id);
+        }
+      }
+
+      console.log(`[Admin] Creating user: ${email}`);
+      let authResult;
+      const { data: createdData, error: createdError } = await supabaseAdmin.auth.admin.createUser({
         email,
-        password,
+        password: password.trim(),
         email_confirm: true,
         user_metadata: { full_name: fullName }
       });
 
-      if (authError) throw authError;
+      authResult = { data: createdData, error: createdError };
 
+      if (createdError) {
+        if (createdError.message.includes('already registered')) {
+          console.log(`[Admin] User ${email} already registered, updating password and syncing profile...`);
+          
+          let targetId = existingProfile?.id;
+          
+          if (!targetId) {
+            const { data: listData } = await supabaseAdmin.auth.admin.listUsers();
+            targetId = listData?.users.find(u => u.email === email)?.id;
+          }
+
+          if (targetId) {
+            // Force update password for existing user and ensure they are confirmed
+            const { data: updatedData, error: updateError } = await supabaseAdmin.auth.admin.updateUserById(targetId, { 
+              password: password.trim(),
+              email_confirm: true,
+              user_metadata: { full_name: fullName }
+            });
+            
+            if (updateError) {
+              console.error(`[Admin] Failed to update existing user ${email}:`, updateError);
+              return res.status(400).json({ error: `Update failed: ${updateError.message}` });
+            }
+            authResult = { data: updatedData, error: null };
+          } else {
+            return res.status(400).json({ error: "User exists in auth but could not be resolved to an ID" });
+          }
+        } else {
+          console.error(`[Admin] Auth creation failed for ${email}:`, createdError);
+          return res.status(400).json({ 
+            error: `Database error creating new user: ${createdError.message}`,
+            details: createdError.code || createdError.status,
+            code: createdError.code
+          });
+        }
+      }
+
+      const userId = authResult.data.user?.id;
+      if (!userId) {
+        throw new Error("User creation succeeded but no user ID was found");
+      }
+
+      console.log(`[Admin] Syncing profile for: ${email} (${userId})`);
       const { error: profileError } = await supabaseAdmin
         .from('profiles')
         .upsert([{
-          id: authData.user.id,
+          id: userId,
           email,
           displayName: fullName,
           department: department || 'IT Department',
-          role: 'employee',
+          role: role || 'employee',
           needsPasswordChange: true
         }], { onConflict: 'id' });
 
-      if (profileError) throw profileError;
+      if (profileError) {
+        console.error(`[Admin] Profile sync failed for ${email}:`, profileError);
+      }
 
-      res.json({ success: true, user: authData.user });
+      // Sync profileId to employees table
+      const { error: empError } = await supabaseAdmin
+        .from('employees')
+        .update({ profileId: userId })
+        .eq('email', email);
+      
+      if (empError) {
+        console.warn(`[Admin] Failed to link employee record for ${email}:`, empError);
+      }
+
+      res.json({ success: true, user: authResult.data.user });
     } catch (error: any) {
-      console.error('Error creating user:', error);
-      res.status(400).json({ error: error.message });
+      console.error('[Admin] Unexpected error in create-user:', error);
+      res.status(500).json({ 
+        error: error.message || "An unexpected error occurred during user creation",
+        details: error.details
+      });
     }
   });
 
@@ -182,7 +265,10 @@ async function startServer() {
     if (!supabaseAdmin) return res.status(500).json({ error: "Supabase Service Role Key not configured" });
     const { id, newPassword } = req.body;
     try {
-      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, { password: newPassword });
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(id, { 
+        password: newPassword.trim(),
+        email_confirm: true
+      });
       if (authError) throw authError;
       const { error: profileError } = await supabaseAdmin.from('profiles').update({ needsPasswordChange: true }).eq('id', id);
       if (profileError) throw profileError;
@@ -334,7 +420,7 @@ async function startServer() {
     try {
       const { data: userData, error: userError } = await supabaseAdmin.auth.admin.createUser({
         email: adminEmail,
-        password: adminPass,
+        password: adminPass.trim(),
         email_confirm: true,
         user_metadata: { full_name: 'Default Admin' }
       });

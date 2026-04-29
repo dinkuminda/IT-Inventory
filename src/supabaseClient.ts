@@ -19,3 +19,20 @@ export const supabase = createClient(
   supabaseUrl || 'https://placeholder.supabase.co', 
   supabaseAnonKey || 'placeholder'
 );
+
+export const logAction = async (action: string, entityType: string, entityId?: string, details?: any) => {
+  try {
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return;
+
+    await supabase.from('audit_logs').insert([{
+      userId: user.id,
+      action,
+      entityType,
+      entityId,
+      details
+    }]);
+  } catch (error) {
+    console.error('Audit log error:', error);
+  }
+};

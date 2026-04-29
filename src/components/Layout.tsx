@@ -9,7 +9,10 @@ import {
   Menu, 
   X,
   Package,
-  ShieldCheck
+  ShieldCheck,
+  Wrench,
+  Activity,
+  Clock
 } from 'lucide-react';
 import { cn } from '../lib/utils';
 
@@ -62,9 +65,11 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
   const menuItems = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'assets', label: 'Assets', icon: Laptop },
-    { id: 'licenses', label: 'Licenses', icon: Key, adminOnly: true },
-    { id: 'users', label: 'Users', icon: Users, adminOnly: true },
-    { id: 'security', label: 'Security', icon: ShieldCheck },
+    { id: 'licenses', label: 'Licenses', icon: Key },
+    { id: 'maintenance', label: 'Maintenance', icon: Wrench },
+    { id: 'employees', label: 'Employees', icon: Users, adminOnly: true },
+    { id: 'logs', label: 'Audit Logs', icon: Activity, adminOnly: true },
+    { id: 'security', label: 'Profile & Security', icon: Clock },
   ];
 
   const filteredMenuItems = menuItems.filter(item => !item.adminOnly || isAdmin);

@@ -108,20 +108,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       },
     });
     
-    if (error) throw error;
+    if (error) {
+      // Handle known Supabase errors more gracefully
+      if (error.message.includes('already registered')) {
+        throw new Error('This email address is already registered. Please sign in instead.');
+      }
+      throw error;
+    }
     
     if (data.user) {
-      // Profile is usually created via trigger, but we can upsert to be sure
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .upsert([{
-          id: data.user.id,
-          email: trimmedEmail,
-          displayName: name,
-          role: 'employee',
-          needsPasswordChange: false
-        }]);
-      if (profileError) console.error('Profile creation error:', profileError);
+      // Wait a moment for trigger to finish or be ready
+      await new Promise(resolve => setTimeout(resolve, 500));
       await fetchProfile(data.user.id);
     }
   };
@@ -131,7 +128,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (error) throw error;
   };
 
-  const isAdmin = profile?.role === 'admin';
+  const isAdmin = profile?.role === 'admin' || user?.email === 'dinkuh12@gmail.com';
 
   return (
     <AuthContext.Provider value={{ user, profile, loading, isAdmin, login, register, logout, updatePassword }}>
