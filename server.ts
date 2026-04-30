@@ -455,7 +455,9 @@ async function startServer() {
   }
 
   // Bind to port 3000
-  if (!process.env.VERCEL) {
+  // AI Studio requires binding to 3000. We listen unless it's a Vercel production environment.
+  const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL;
+  if (!isVercel || process.env.NODE_ENV !== 'production') {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server is listening on 0.0.0.0:${PORT}`);
     });

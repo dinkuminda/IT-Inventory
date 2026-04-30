@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
+import { isSupabaseConfigured } from '../supabaseClient';
 import { Package, LogIn, ShieldCheck, Laptop, Key, Users, Mail, Lock, UserPlus, User, Eye, EyeOff } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
@@ -27,6 +28,21 @@ export default function Login() {
     setError('');
     setIsSubmitting(true);
     try {
+      if (!isSupabaseConfigured) {
+        setError(
+          <div className="text-left space-y-2">
+            <p className="font-bold">Supabase Not Configured</p>
+            <p className="text-xs font-normal opacity-90">
+              Please set your <code className="bg-black/10 px-1 rounded mx-1">VITE_SUPABASE_URL</code> and 
+              <code className="bg-black/10 px-1 rounded mx-1">VITE_SUPABASE_PUBLIC_KEY</code> in the 
+              **Secrets** panel in AI Studio.
+            </p>
+          </div>
+        );
+        setIsSubmitting(false);
+        return;
+      }
+
       if (isLogin) {
         await login(email, password);
       } else {
