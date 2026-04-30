@@ -5,9 +5,11 @@ import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 
 export default function Login() {
-  const { login, loading } = useAuth();
+  const { login, register, loading } = useAuth();
+  const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [fullName, setFullName] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<React.ReactNode>('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -25,7 +27,11 @@ export default function Login() {
     setError('');
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      if (isLogin) {
+        await login(email, password);
+      } else {
+        await register(email, password, fullName);
+      }
     } catch (err: any) {
       if (err.message?.includes('API key') || err.message?.includes('apiKey') || err.message?.includes('invalid')) {
         setError(
@@ -59,7 +65,47 @@ export default function Login() {
         <h1 className="text-2xl font-bold tracking-tight text-neutral-900 mb-2">ICS IT Admin Directorate</h1>
         <p className="text-neutral-500 font-medium mb-8">Inventory Management System</p>
 
+        <div className="flex bg-neutral-100 p-1 rounded-2xl mb-8">
+          <button 
+            type="button"
+            onClick={() => { setIsLogin(true); setError(''); }}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
+              isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+            )}
+          >
+            Sign In
+          </button>
+          <button 
+            type="button"
+            onClick={() => { setIsLogin(false); setError(''); }}
+            className={cn(
+              "flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
+              !isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
+            )}
+          >
+            Sign Up
+          </button>
+        </div>
+
         <form onSubmit={handleSubmit} className="space-y-4 text-left">
+          {!isLogin && (
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Full Name</label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
+                <input
+                  required
+                  type="text"
+                  placeholder="John Doe"
+                  className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-sans"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                />
+              </div>
+            </div>
+          )}
+
           <div className="space-y-1.5">
             <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Email Address</label>
             <div className="relative">
@@ -114,8 +160,8 @@ export default function Login() {
               <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
             ) : (
               <>
-                <LogIn size={20} />
-                Sign In
+                {isLogin ? <LogIn size={20} /> : <UserPlus size={20} />}
+                {isLogin ? 'Sign In' : 'Create Account'}
               </>
             )}
           </button>

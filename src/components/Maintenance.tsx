@@ -51,7 +51,7 @@ export default function Maintenance() {
     try {
       const { data: recData, error: recError } = await supabase
         .from('maintenance')
-        .select('*, assets(name, type, serialNumber)')
+        .select('*, assets(name, type, "serialNumber")')
         .order('date', { ascending: false });
 
       if (recError) throw recError;
@@ -59,7 +59,7 @@ export default function Maintenance() {
 
       const { data: assetData, error: assetError } = await supabase
         .from('assets')
-        .select('id, name, serialNumber')
+        .select('id, name, "serialNumber"')
         .order('name');
 
       if (assetError) throw assetError;

@@ -33,10 +33,14 @@ CREATE TABLE IF NOT EXISTS public.assets (
 CREATE TABLE IF NOT EXISTS public.licenses (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  vendor TEXT,
   type TEXT,
   "key" TEXT,
+  seats INTEGER DEFAULT 1,
+  "usedSeats" INTEGER DEFAULT 0,
   status TEXT DEFAULT 'Active',
   "assignedTo" TEXT,
+  department TEXT,
   "expiryDate" TEXT,
   notes TEXT,
   "updatedAt" TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -58,7 +62,7 @@ CREATE TABLE IF NOT EXISTS public.maintenance (
 -- 5. Create AUDIT_LOGS table
 CREATE TABLE IF NOT EXISTS public.audit_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  "userId" UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  "userId" UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   "action" TEXT NOT NULL,
   "entityType" TEXT NOT NULL,
   "entityId" TEXT,

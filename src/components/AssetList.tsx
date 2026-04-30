@@ -60,7 +60,7 @@ export default function AssetList() {
       const { data, error } = await supabase
         .from('assets')
         .select('*')
-        .order('updatedAt', { ascending: false });
+        .order('"updatedAt"', { ascending: false });
       
       if (error) throw error;
       setAssets(data || []);
@@ -68,8 +68,8 @@ export default function AssetList() {
       // Fetch employees for the dropdown
       const { data: employeeData } = await supabase
         .from('employees')
-        .select('email, fullName, department')
-        .order('fullName', { ascending: true });
+        .select('email, "fullName", department')
+        .order('"fullName"', { ascending: true });
       setUsers(employeeData || []);
     } catch (error: any) {
       console.error('Error fetching assets:', error);
@@ -162,14 +162,37 @@ export default function AssetList() {
   };
 
   useEffect(() => {
-    if (isModalOpen && !editingAsset) {
-      const email = profile?.email || user?.email || '';
-      setFormData(prev => ({
-        ...prev,
-        assignedTo: isAdmin ? '' : email
-      }));
+    if (isModalOpen) {
+      if (editingAsset) {
+        setFormData({
+          name: editingAsset.name || '',
+          type: editingAsset.type || 'Laptop',
+          serialNumber: editingAsset.serialNumber || '',
+          status: editingAsset.status || 'In Stock',
+          assignedTo: editingAsset.assignedTo || '',
+          roles: editingAsset.roles || 'IT Support',
+          location: editingAsset.location || '',
+          date: editingAsset.date || new Date().toISOString().split('T')[0],
+          remark: editingAsset.remark || '',
+          notes: editingAsset.notes || ''
+        });
+      } else {
+        const email = profile?.email || user?.email || '';
+        setFormData({
+          name: '',
+          type: 'Laptop',
+          serialNumber: '',
+          status: 'In Stock',
+          assignedTo: isAdmin ? '' : email,
+          roles: 'IT Support',
+          location: '',
+          date: new Date().toISOString().split('T')[0],
+          remark: '',
+          notes: ''
+        });
+      }
     }
-  }, [isModalOpen, editingAsset, profile, user, isAdmin]);
+  }, [isModalOpen, editingAsset, profile, user, isAdmin, setFormData]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

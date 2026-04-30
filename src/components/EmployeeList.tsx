@@ -62,7 +62,7 @@ export default function EmployeeList() {
       const { data, error } = await supabase
         .from('employees')
         .select('*')
-        .order('fullName', { ascending: true });
+        .order('"fullName"', { ascending: true });
       
       if (error) throw error;
       setEmployees(data || []);

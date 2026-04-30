@@ -37,14 +37,14 @@ export default function AuditLogs() {
     try {
       let query = supabase
         .from('audit_logs')
-        .select('*, profiles(displayName, email, role)', { count: 'exact' });
+        .select('*, profiles("displayName", email, role)', { count: 'exact' });
 
       if (searchTerm) {
         query = query.or(`action.ilike.%${searchTerm}%,entityType.ilike.%${searchTerm}%`);
       }
 
       const { data, count, error } = await query
-        .order('createdAt', { ascending: false })
+        .order('"createdAt"', { ascending: false })
         .range((page - 1) * pageSize, page * pageSize - 1);
 
       if (error) throw error;
