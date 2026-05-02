@@ -380,35 +380,39 @@ async function startServer() {
   });
 
   const isProduction = process.env.NODE_ENV === "production";
+  const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL;
   const distPath = path.join(process.cwd(), 'dist');
   
-  const useStatic = isProduction && fs.existsSync(path.join(distPath, 'index.html'));
+  // Skip Vite/Static if on Vercel as Vercel handles static routing and rewrites
+  if (!isVercel) {
+    const useStatic = isProduction && fs.existsSync(path.join(distPath, 'index.html'));
 
-  if (!useStatic) {
-    console.log('Initializing Vite in middleware mode...');
-    try {
-      const vite = await createViteServer({
-        server: { middlewareMode: true },
-        appType: "spa",
-        root: process.cwd()
-      });
-      app.use(vite.middlewares);
-      console.log('Vite middleware mounted.');
-    } catch (viteError) {
-      console.error('Vite initialization failed:', viteError);
-    }
-  } else {
-    console.log('Serving static files from:', distPath);
-    app.use(express.static(distPath));
-    
-    // Catch-all for SPA fallback
-    app.use((req, res, next) => {
-      if (req.method === 'GET' && !req.path.startsWith('/api')) {
-        res.sendFile(path.join(distPath, 'index.html'));
-      } else {
-        next();
+    if (!useStatic) {
+      console.log('Initializing Vite in middleware mode...');
+      try {
+        const vite = await createViteServer({
+          server: { middlewareMode: true },
+          appType: "spa",
+          root: process.cwd()
+        });
+        app.use(vite.middlewares);
+        console.log('Vite middleware mounted.');
+      } catch (viteError) {
+        console.error('Vite initialization failed:', viteError);
       }
-    });
+    } else {
+      console.log('Serving static files from:', distPath);
+      app.use(express.static(distPath));
+      
+      // Catch-all for SPA fallback
+      app.use((req, res, next) => {
+        if (req.method === 'GET' && !req.path.startsWith('/api')) {
+          res.sendFile(path.join(distPath, 'index.html'));
+        } else {
+          next();
+        }
+      });
+    }
   }
 
   // Auto-bootstrap if env vars are present
@@ -456,7 +460,6 @@ async function startServer() {
 
   // Bind to port 3000
   // AI Studio requires binding to 3000. We listen unless it's a Vercel production environment.
-  const isVercel = process.env.VERCEL === '1' || !!process.env.VERCEL;
   if (!isVercel || process.env.NODE_ENV !== 'production') {
     app.listen(PORT, "0.0.0.0", () => {
       console.log(`Server is listening on 0.0.0.0:${PORT}`);
