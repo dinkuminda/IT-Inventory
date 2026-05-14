@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { isSupabaseConfigured } from '../supabaseClient';
-import { Package, LogIn, ShieldCheck, Laptop, Key, Users, Mail, Lock, UserPlus, User, Eye, EyeOff } from 'lucide-react';
+import { Package, LogIn, ShieldCheck, Laptop, Key, Users, Mail, Lock, UserPlus, User, Eye, EyeOff, RefreshCw } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { cn } from '../lib/utils';
 
@@ -17,8 +17,8 @@ export default function Login() {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50">
-        <div className="w-12 h-12 border-4 border-neutral-200 border-t-neutral-900 rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-[#f4f7f6]">
+        <div className="w-12 h-12 border-4 border-neutral-200 border-t-[#10214a] rounded-full animate-spin" />
       </div>
     );
   }
@@ -53,14 +53,7 @@ export default function Login() {
         setError(
           <div>
             <p className="font-bold mb-1">Invalid API Key</p>
-            <p className="font-normal opacity-90">Please ensure <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_PUBLIC_KEY</code> in your Secrets is set to your Supabase <code className="bg-black/10 px-1 rounded">anon</code> <code className="bg-black/10 px-1 rounded">public</code> key.</p>
-          </div>
-        );
-      } else if (err.message?.toLowerCase().includes('invalid login credentials')) {
-        setError(
-          <div>
-            <p className="font-bold mb-1">Invalid Credentials</p>
-            <p className="font-normal opacity-90 text-[10px]">Please double-check your email and password. If you just had your account enabled, ensure you are using the initial password provided by your administrator.</p>
+            <p className="font-normal opacity-90 text-[10px]">Please ensure <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_PUBLIC_KEY</code> is correctly set.</p>
           </div>
         );
       } else {
@@ -72,120 +65,159 @@ export default function Login() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-neutral-50 p-6">
+    <div className="min-h-screen flex items-center justify-center bg-[#e2e8f0] p-4 md:p-8">
       <motion.div 
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        className="w-full max-w-md bg-white rounded-[2.5rem] shadow-2xl shadow-neutral-200 border border-neutral-200 p-10 text-center"
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        className="w-full max-w-5xl bg-white shadow-2xl rounded-[1rem] overflow-hidden flex flex-col md:flex-row min-h-[600px]"
       >
-        <h1 className="text-2xl font-bold tracking-tight text-neutral-900 mb-2">ICS IT Admin Directorate</h1>
-        <p className="text-neutral-500 font-medium mb-8">Inventory Management System</p>
+        {/* Left Side - Form */}
+        <div className="w-full md:w-3/5 p-8 md:p-12 bg-[#f8fafc] flex flex-col justify-between relative">
+          <div>
+            <div className="mb-10 text-center md:text-left">
+              <h1 className="text-2xl font-bold text-slate-500 mb-1">Login To</h1>
+              <p className="text-sm font-semibold text-slate-500 opacity-80 uppercase tracking-tight">
+                Immigration and Citizenship Service System
+              </p>
+            </div>
 
-        <div className="flex bg-neutral-100 p-1 rounded-2xl mb-8">
-          <button 
-            type="button"
-            onClick={() => { setIsLogin(true); setError(''); }}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
-              isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
-            )}
-          >
-            Sign In
-          </button>
-          <button 
-            type="button"
-            onClick={() => { setIsLogin(false); setError(''); }}
-            className={cn(
-              "flex-1 py-2.5 text-xs font-bold uppercase tracking-widest rounded-xl transition-all",
-              !isLogin ? "bg-white text-neutral-900 shadow-sm" : "text-neutral-500 hover:text-neutral-700"
-            )}
-          >
-            Sign Up
-          </button>
+            <form onSubmit={handleSubmit} className="flex flex-col md:flex-row gap-8 items-start">
+              <div className="flex-1 w-full space-y-6">
+                {!isLogin && (
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-600 ml-1">Full Name *</label>
+                    <input
+                      required
+                      type="text"
+                      className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10214a]/20 focus:border-[#10214a] transition-all text-sm"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                    />
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <label className="text-xs font-bold text-slate-600 ml-1">Username *</label>
+                  <input
+                    required
+                    type="email"
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10214a]/20 focus:border-[#10214a] transition-all text-sm"
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
+                </div>
+
+                <div className="space-y-1.5 relative">
+                  <label className="text-xs font-bold text-slate-600 ml-1">Password *</label>
+                  <input
+                    required
+                    type={showPassword ? "text" : "password"}
+                    className="w-full px-4 py-3 bg-white border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#10214a]/20 focus:border-[#10214a] transition-all text-sm"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                  <button 
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-[34px] text-slate-400 hover:text-slate-600"
+                  >
+                    <Laptop size={16} /> {/* Using laptop icon as fallback for the special icon in image */}
+                  </button>
+                </div>
+
+                {error && (
+                  <div className="text-[11px] text-red-500 bg-red-50 p-3 rounded-lg border border-red-100 font-medium">
+                    {error}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 pt-4">
+                  <button
+                    type="submit"
+                    disabled={isSubmitting}
+                    className="flex-1 bg-[#10214a] text-white py-2.5 rounded-full font-bold hover:bg-[#0c1a3b] transition-all active:scale-[0.98] disabled:opacity-50 text-sm shadow-lg shadow-blue-900/20"
+                  >
+                    {isSubmitting ? 'Authenticating...' : (isLogin ? 'Log In' : 'Sign Up')}
+                  </button>
+                </div>
+
+                <div className="pt-2 text-center md:text-left">
+                  <button 
+                    type="button"
+                    onClick={() => setIsLogin(!isLogin)}
+                    className="text-xs font-bold text-slate-500 hover:text-[#10214a] transition-colors"
+                  >
+                    {isLogin ? "Don't have an account? Sign Up" : "Already have an account? Log In"}
+                  </button>
+                </div>
+              </div>
+
+              {/* Fingerprint Mock Area */}
+              <div className="hidden lg:flex flex-col items-center gap-2 p-6 bg-slate-100 rounded-xl border border-slate-200">
+                <div className="flex justify-between w-full mb-1">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Fingerprint</span>
+                  <RefreshCw size={12} className="text-slate-400 cursor-pointer" />
+                </div>
+                <div className="w-24 h-32 bg-white rounded-lg border border-slate-200 flex items-center justify-center mb-2">
+                  <ShieldCheck size={48} className="text-slate-200" />
+                </div>
+                <button type="button" className="w-full py-1.5 px-4 bg-[#10214a] text-white text-[10px] font-bold rounded-full uppercase tracking-widest hover:opacity-90">
+                  Scan
+                </button>
+                <div className="flex gap-4 mt-2">
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="mode" className="w-3 h-3 accent-[#10214a]" defaultChecked />
+                    <span className="text-[9px] font-bold text-slate-500">Single</span>
+                  </label>
+                  <label className="flex items-center gap-1 cursor-pointer">
+                    <input type="radio" name="mode" className="w-3 h-3 accent-[#10214a]" />
+                    <span className="text-[9px] font-bold text-slate-500">Stay</span>
+                  </label>
+                </div>
+              </div>
+            </form>
+          </div>
+
+          <div className="mt-8 pt-6 border-t border-slate-200 text-slate-400">
+            <p className="text-[10px] font-bold">V1.0.0-PRODUCTION-General</p>
+          </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4 text-left">
-          {!isLogin && (
-            <div className="space-y-1.5">
-              <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Full Name</label>
+        {/* Right Side - Navy Branding */}
+        <div className="w-full md:w-2/5 bg-[#10214a] p-12 flex flex-col items-center justify-center text-center relative overflow-hidden">
+          {/* Subtle pattern or Glow */}
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
+          
+          <motion.div 
+            initial={{ y: 20, opacity: 0 }}
+            animate={{ y: 0, opacity: 1 }}
+            transition={{ delay: 0.2 }}
+            className="z-10"
+          >
+            {/* Logo Group */}
+            <div className="flex flex-col items-center gap-4">
               <div className="relative">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
-                <input
-                  required
-                  type="text"
-                  placeholder="John Doe"
-                  className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-sans"
-                  value={fullName}
-                  onChange={(e) => setFullName(e.target.value)}
-                />
+                <ShieldCheck size={120} className="text-white opacity-80" strokeWidth={1} />
+                {/* Overlaying a fingerprint feel */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <LogIn size={40} className="text-white ml-2" />
+                </div>
+              </div>
+              <h2 className="text-7xl font-bold text-white tracking-tighter mt-2">ICS</h2>
+              <div className="space-y-1">
+                <p className="text-2xl font-normal text-white leading-tight font-serif" style={{ fontFamily: 'noto-sans-ethiopi' }}>
+                  የኢሚግሬሽንና ዜግነት አገልግሎት
+                </p>
+                <p className="text-sm font-medium text-white/70 uppercase tracking-[0.2em] mt-2">
+                  IMMIGRATION AND CITIZENSHIP SERVICE
+                </p>
               </div>
             </div>
-          )}
+          </motion.div>
 
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Email Address</label>
-            <div className="relative">
-              <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
-              <input
-                required
-                type="email"
-                placeholder="admin@assetflow.com"
-                className="w-full pl-12 pr-4 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-sans"
-                value={email}
-                onChange={(e) => setEmail(e.target.value.trim())}
-              />
-            </div>
+          <div className="absolute bottom-6 left-0 right-0 opacity-20 transform scale-150 -z-0">
+             {/* Large background decorative logo can be added here if needed */}
           </div>
-
-          <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-widest text-neutral-500 ml-1">Password</label>
-            <div className="relative">
-              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-neutral-400" size={18} />
-              <input
-                required
-                type={showPassword ? "text" : "password"}
-                minLength={6}
-                placeholder="••••••••"
-                className="w-full pl-12 pr-12 py-3 bg-neutral-50 border border-neutral-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-neutral-900/10 focus:border-neutral-900 transition-all font-mono"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-              <button 
-                type="button"
-                onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-400 hover:text-neutral-900 transition-colors"
-                tabIndex={-1}
-              >
-                {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            </div>
-          </div>
-
-          {error && (
-            <p className="text-xs font-bold text-red-500 bg-red-50 p-3 rounded-xl border border-red-100">
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={isSubmitting}
-            className="w-full flex items-center justify-center gap-3 bg-neutral-900 text-white py-4 rounded-2xl font-bold hover:bg-neutral-800 transition-all shadow-xl shadow-neutral-200 active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            {isSubmitting ? (
-              <div className="w-5 h-5 border-2 border-white/20 border-t-white rounded-full animate-spin" />
-            ) : (
-              <>
-                {isLogin ? <LogIn size={20} /> : <UserPlus size={20} />}
-                {isLogin ? 'Sign In' : 'Create Account'}
-              </>
-            )}
-          </button>
-        </form>
-
-        <div className="mt-10 pt-8 border-t border-neutral-100 flex items-center justify-center gap-2 text-neutral-400">
-          <ShieldCheck size={16} />
-          <p className="text-xs font-bold uppercase tracking-widest">Enterprise Secure</p>
         </div>
       </motion.div>
     </div>
