@@ -56,6 +56,13 @@ export default function Login() {
             <p className="font-normal opacity-90 text-[10px]">Please ensure <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_PUBLIC_KEY</code> is correctly set.</p>
           </div>
         );
+      } else if (err.message?.toLowerCase().includes('failed to fetch')) {
+        setError(
+          <div>
+            <p className="font-bold mb-1">Connection Error</p>
+            <p className="font-normal opacity-90 text-[10px]">Failed to connect to Supabase. Please ensure your <code className="bg-black/10 px-1 rounded">VITE_SUPABASE_URL</code> is correct and that your network allows connections to Supabase.</p>
+          </div>
+        );
       } else {
         setError(err.message || 'Authentication failed');
       }

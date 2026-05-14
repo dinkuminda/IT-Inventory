@@ -7,6 +7,7 @@ const isPlaceholder = (val: string | undefined) =>
   !val || 
   val.includes('YOUR_') || 
   val === 'placeholder' || 
+  val.includes('placeholder.supabase.co') ||
   val.length < 10;
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder(supabaseUrl) && !isPlaceholder(supabaseAnonKey));

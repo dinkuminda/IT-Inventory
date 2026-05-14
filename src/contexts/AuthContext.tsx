@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { supabase } from '../supabaseClient';
+import { supabase, isSupabaseConfigured } from '../supabaseClient';
 import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
@@ -11,6 +11,7 @@ interface AuthContextType {
   register: (email: string, pass: string, name: string) => Promise<void>;
   logout: () => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
+  error: string | null;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -19,13 +20,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      setLoading(false);
+      return;
+    }
+
     // Get initial session
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
         if (error.message.includes('API key')) {
           console.error('Supabase API key is invalid. Please check your VITE_SUPABASE_PUBLIC_KEY.');
+          setError('Invalid Supabase API key.');
+        } else if (error.message.toLowerCase().includes('failed to fetch')) {
+          setError('Failed to connect to Supabase. Check your URL and network.');
         } else {
           console.error('Initial session fetch error:', error.message);
         }
@@ -36,6 +46,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }).catch(err => {
       console.error('Initial session fetch failed unexpectedly:', err);
+      if (err.message?.toLowerCase().includes('failed to fetch')) {
+        setError('Failed to connect to Supabase. Check your URL and network.');
+      }
     }).finally(() => {
       setLoading(false);
     });
@@ -131,7 +144,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const isAdmin = profile?.role === 'admin' || user?.email === 'dinkuh12@gmail.com';
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, isAdmin, login, register, logout, updatePassword }}>
+    <AuthContext.Provider value={{ user, profile, loading, isAdmin, login, register, logout, updatePassword, error }}>
       {children}
     </AuthContext.Provider>
   );
