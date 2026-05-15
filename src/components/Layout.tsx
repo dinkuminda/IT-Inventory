@@ -105,7 +105,7 @@ export default function Layout({ children, activeTab, setActiveTab }: LayoutProp
               />
             </div>
             <div className="whitespace-nowrap">
-              <h1 className="text-lg font-bold tracking-tight text-white leading-tight">ICS IT Admin</h1>
+              <h1 className="text-lg font-bold tracking-tight text-white leading-tight">ITA Directorate</h1>
               <p className="text-[9px] text-neutral-500 font-bold uppercase tracking-wider">Directorate Inventory</p>
             </div>
           </div>

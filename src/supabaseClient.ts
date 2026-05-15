@@ -8,7 +8,8 @@ const isPlaceholder = (val: string | undefined) =>
   val.includes('YOUR_') || 
   val === 'placeholder' || 
   val.includes('placeholder.supabase.co') ||
-  val.length < 10;
+  val.includes('supabase.co') && val.length < 30 || // URL too short
+  val.length < 20; // Key too short
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey && !isPlaceholder(supabaseUrl) && !isPlaceholder(supabaseAnonKey));
 

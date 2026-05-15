@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { isSupabaseConfigured } from './supabaseClient';
-import { ShieldCheck } from 'lucide-react';
+import { ShieldCheck, Package } from 'lucide-react';
 import Layout from './components/Layout';
 import Dashboard from './components/Dashboard';
 import AssetList from './components/AssetList';
@@ -18,26 +18,28 @@ function AppContent() {
 
   if (authError) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-red-50 px-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-sm border border-red-200">
-          <h1 className="text-xl font-bold text-red-600 mb-4 flex items-center gap-2">
-            <ShieldCheck className="text-red-600" />
-            Connection Error
-          </h1>
-          <p className="text-sm text-slate-600 mb-6 font-medium">
+      <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8] px-4 font-sans">
+        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100 text-center">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-red-50 rounded-2xl flex items-center justify-center text-red-600">
+              <ShieldCheck size={32} />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2">Connection Error</h1>
+          <p className="text-slate-500 mb-8 text-[15px] leading-relaxed">
             {authError}
           </p>
-          <div className="bg-slate-50 p-4 rounded-lg space-y-2 mb-6">
-            <p className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Troubleshooting:</p>
-            <ul className="text-xs text-slate-600 list-disc ml-4 space-y-1">
-              <li>Check your <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> in Secrets</li>
-              <li>Ensure your internet connection is active</li>
-              <li>Verify your Supabase project is not paused</li>
+          <div className="bg-slate-50 p-5 rounded-2xl space-y-2 mb-8 text-left">
+            <p className="text-[11px] font-bold text-slate-400 uppercase tracking-widest mb-2">Troubleshooting:</p>
+            <ul className="text-xs text-slate-600 space-y-2 list-disc pl-4">
+              <li>Verify <code className="bg-slate-200 px-1 rounded">VITE_SUPABASE_URL</code> is correct</li>
+              <li>Ensure your <code className="bg-slate-200 px-1 rounded">anon</code> public key is set</li>
+              <li>Check your internet connection and DNS settings</li>
             </ul>
           </div>
           <button 
             onClick={() => window.location.reload()}
-            className="w-full py-2 bg-slate-900 text-white rounded-lg font-bold text-sm hover:bg-slate-800 transition-colors"
+            className="w-full bg-[#1e40af] text-white py-4 rounded-2xl font-bold hover:bg-[#1a3a9a] transition-all shadow-lg shadow-blue-900/20 active:scale-[0.98]"
           >
             Retry Connection
           </button>
@@ -48,24 +50,29 @@ function AppContent() {
 
   if (!isSupabaseConfigured) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-neutral-50 px-4">
-        <div className="max-w-md w-full bg-white p-8 rounded-xl shadow-sm border border-neutral-200">
-          <h1 className="text-xl font-semibold text-neutral-900 mb-4">Configuration Required</h1>
-          <p className="text-neutral-600 mb-6">
-            Please set the following environment variables in the <strong>Secrets</strong> panel:
+      <div className="min-h-screen flex items-center justify-center bg-[#f0f4f8] px-4 font-sans">
+        <div className="max-w-md w-full bg-white p-10 rounded-[2.5rem] shadow-xl shadow-blue-900/5 border border-slate-100">
+          <div className="flex justify-center mb-6">
+            <div className="w-16 h-16 bg-[#eef2ff] rounded-2xl flex items-center justify-center text-[#1e40af]">
+              <Package size={32} />
+            </div>
+          </div>
+          <h1 className="text-2xl font-bold text-slate-900 mb-2 text-center">Setup Required</h1>
+          <p className="text-slate-500 mb-8 text-[15px] leading-relaxed text-center">
+            To start using <strong>ITA Directorate Inventory</strong>, please configure your Supabase credentials in the <strong>Secrets</strong> panel.
           </p>
-          <ul className="space-y-3 mb-8">
-            <li className="flex flex-col">
-              <code className="text-xs font-mono bg-neutral-100 p-1.5 rounded text-neutral-800">VITE_SUPABASE_URL</code>
-              <span className="text-[10px] text-neutral-400 mt-1">Project Settings {"->"} API {"->"} Project URL</span>
-            </li>
-            <li className="flex flex-col">
-              <code className="text-xs font-mono bg-neutral-100 p-1.5 rounded text-neutral-800">VITE_SUPABASE_PUBLIC_KEY</code>
-              <span className="text-[10px] text-neutral-400 mt-1">Project Settings {"->"} API {"->"} `anon` `public` key</span>
-            </li>
-          </ul>
-          <p className="text-xs text-neutral-500 italic">
-            Note: You may need to restart the development server after updating secrets.
+          <div className="space-y-4 mb-10">
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Environment Variable</span>
+              <code className="text-sm font-mono bg-slate-50 p-3 rounded-xl border border-slate-100 text-slate-700">VITE_SUPABASE_URL</code>
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Environment Variable</span>
+              <code className="text-sm font-mono bg-slate-50 p-3 rounded-xl border border-slate-100 text-slate-700">VITE_SUPABASE_PUBLIC_KEY</code>
+            </div>
+          </div>
+          <p className="text-xs text-slate-400 italic text-center leading-relaxed">
+            Note: You may need to restart the development server after updating secrets to apply changes.
           </p>
         </div>
       </div>
